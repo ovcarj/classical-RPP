@@ -1,0 +1,21 @@
+units           real
+atom_style      full
+bond_style      harmonic
+dihedral_style  charmm
+angle_style     harmonic
+
+box             tilt large
+boundary        p p p
+read_data       written_data.PREFIX
+
+replicate       1 1 1
+
+pair_style      hybrid lj/cut/coul/long  9.0 9.0 buck/coul/long 9.0
+
+
+
+special_bonds   lj 0.0 0.0 0.5 coul 0.0 0.0 0.833 dihedral yes
+
+kspace_style    pppm 1.0e-7
+
+pair_modify     tail yes
