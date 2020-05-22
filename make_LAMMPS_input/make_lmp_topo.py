@@ -486,7 +486,7 @@ bash('./molecule_indices.sh ' + str(int(N_chem * 2)) + ' ' + str(int(N_MOL)) + '
 
 bash('rm tmp*')
 bash('rm *_info.dat')
-bash('rm amber2lammps.sh  gaussian.sh  gaussian_template.com  get_charges.sh  get_mol_info.sh  in_template.file  teran.sh gaussian_in.com neighbor.py molecule_indices.sh')
+bash('rm amber2lammps.sh amber2lammps.py gaussian.sh  gaussian_template.com  get_charges.sh  get_mol_info.sh  in_template.file  teran.sh gaussian_in.com neighbor.py molecule_indices.sh README*')
 #bash('rm -r ' + prefix)
 
 #if (N > 1):
@@ -494,3 +494,4 @@ bash('rm amber2lammps.sh  gaussian.sh  gaussian_template.com  get_charges.sh  ge
 
 bash('mkdir ready')
 bash('cp -t ready written_data.' + prefix + ' in_' + prefix + 'PbBr.in' + ' *xyz cell*dat charges.dat minima.py' )
+bash('rm *dat* in* minima.py')

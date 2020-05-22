@@ -48,7 +48,7 @@ scp jovcar@teran.srce.hr:/shared/jovcar/gaussian/scripting/$1/charges/\{$1.top,$
 CONDA_BASE=$(conda info --base)
 source ${CONDA_BASE}/etc/profile.d/conda.sh
 
-conda activate python2 && python2 /home/essil/Documents/amber2lmp/amber2lammps.py ${1} && conda deactivate
+conda activate python2 && python2 ../amber2lammps.py ${1} && conda deactivate
 
 file=data.$1
 
@@ -59,5 +59,3 @@ awk -v type=$TYPES -v dnr=$DIHEDRAL_NR ' {if(NR>=dnr+2 && NR<=dnr+1+type) {t=$3;
 
 mv data.$1 bad_dih_data.$1
 mv tmp data.$1
-rm tmp
-
