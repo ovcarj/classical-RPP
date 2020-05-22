@@ -1,0 +1,9 @@
+# make_lmp_topo.py usage
+
+To use make_lmp_topo.py the following lines must be added to .bashrc:
+
+LAMMPS_SCRIPTS_DIR="/path/to/make_LAMMPS_input/scripts/"
+export LAMMPS_SCRIPTS_DIR
+
+MOLECULE_DATABASE_DIR="/path/to/make_LAMMPS_input/database/"
+export MOLECULE_DATABASE_DIR

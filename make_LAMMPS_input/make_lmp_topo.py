@@ -1,5 +1,6 @@
 import sys
 import numpy as np
+import os
 
 from bash import bash
 
@@ -54,13 +55,13 @@ def AverageInorganicZ(atoms, inorganic_indices):
 
 #copy scripts to current dir
 
-script_dir='/home/essil/Documents/amber2lmp/make_input/scripts/'
+script_dir = os.environ["LAMMPS_SCRIPTS_DIR"]
 
 bash('rsync -av ' + script_dir + ' . --exclude=make_lmp_topo.py')
 
 #update database
 
-database_dir = '/home/essil/Documents/amber2lmp/make_input/database/'
+database_dir = os.environ["MOLECULE_DATABASE_DIR"]
 
 database = UpdateDatabase()
 
