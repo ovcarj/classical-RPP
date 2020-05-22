@@ -2,6 +2,7 @@
 
 import numpy as np
 import sys
+import os
 
 from ase.io import read, write
 from ase.io.trajectory import Trajectory, TrajectoryWriter
@@ -90,7 +91,7 @@ if (len(delta_z_factor) == 0):
 
 delta_z_factor = float(delta_z_factor)
 
-frame = read('/home/essil/Documents/structure_maker/inorganic/' + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
+frame = read(os.environ["INORGANIC_FRAME_DIR"] + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
 
 mol = read(str(sys.argv[1]))
 
@@ -255,11 +256,17 @@ for i in range(len(NC_vec)):
 
 ##### Write
 
-top_two = np.argpartition(N_pos[:,2], -2)[-2:] #move top two N positions first
+if (cell_type == '1'):
+    top_two = np.argpartition(N_pos[:,2], -2)[-2:] #move top two N positions first
+    for i in top_two:
+        if (sup == 'y'):
+            N_pos[i][2] += delta_z
 
-for i in top_two:
-    if (sup == 'y'):
-        N_pos[i][2] += delta_z
+if (cell_type == '2'):
+    top_four = np.argpartition(N_pos[:,2], -4)[-4:] #move top four N positions first
+    for i in top_four:
+        if (sup == 'y'):
+            N_pos[i][2] += delta_z
 
 for i in range(len(N_pos)):
     

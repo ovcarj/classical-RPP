@@ -1,0 +1,10 @@
+# structure.py usage:
+
+1) add to .bashrc :
+
+INORGANIC_FRAME_DIR=/path/to/the/directory/inorganic/
+export INORGANIC_FRAME_DIR
+
+*in the future a simple script may be written that adds all environment variables to .bashrc automatically
+
+2) python structure.py molecule.traj (e.g. python structure.py PEA.traj)

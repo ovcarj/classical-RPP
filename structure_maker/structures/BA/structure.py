@@ -2,6 +2,7 @@
 
 import numpy as np
 import sys
+import os
 
 from ase.io import read, write
 from ase.io.trajectory import Trajectory, TrajectoryWriter
@@ -90,7 +91,7 @@ if (len(delta_z_factor) == 0):
 
 delta_z_factor = float(delta_z_factor)
 
-frame = read('/home/essil/Documents/structure_maker/inorganic/' + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
+frame = read(os.environ["INORGANIC_FRAME_DIR"] + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
 
 mol = read(str(sys.argv[1]))
 

@@ -2,6 +2,7 @@
 
 import numpy as np
 import sys
+import os
 
 from ase.io import read, write
 from ase.io.trajectory import Trajectory, TrajectoryWriter
@@ -25,8 +26,8 @@ def normalized(a, axis=-1, order=2):
     return a / np.expand_dims(l2, axis)
 
 def get_rotation_matrix(a,b):
-    scalar = np.dot(a,-b)
-    cross = np.cross(a,-b)
+    scalar = np.dot(a,b)
+    cross = np.cross(a,b)
     I = np.identity(3)
     V = np.array(([0., -cross[2], cross[1]],[cross[2], 0., -cross[0]],[-cross[1], cross[0], 0.]))
     VV = np.dot(V,V)
@@ -90,7 +91,7 @@ if (len(delta_z_factor) == 0):
 
 delta_z_factor = float(delta_z_factor)
 
-frame = read('/home/essil/Documents/structure_maker/inorganic/' + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
+frame = read(os.environ["INORGANIC_FRAME_DIR"] + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
 
 mol = read(str(sys.argv[1]))
 
