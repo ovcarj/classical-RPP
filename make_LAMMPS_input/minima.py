@@ -120,7 +120,7 @@ print('Starting potential energy: ' + str(energy_i))
 #cell2[np.abs(cell2) < 1e-03] = 0.0
 #atoms2.set_cell(cell2)
 
-MaxwellBoltzmannDistribution(atoms, temp=300*units.kB)
+#MaxwellBoltzmannDistribution(atoms, temp=300*units.kB)
 
 #dyn2 = NPTber(atoms, timestep=1 * units.fs, temperature=300, fixcm=True, pressure=1.01325, taut=1e3 * units.fs, taup=1e3 * units.fs, compressibility=0.001)#, taut=1000. * units.fs, pressure=1.01325, taup=1000. * units.fs, compressibility=0.01)
 
@@ -152,6 +152,7 @@ print('Final potential energy: ' + str(energy_f))
 
 #print('Starting global optimization...')
 
-hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=BFGS, minima_threshold=4.0e-3, fmax=1e-02, fmax2=0.1, mdmin=200, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., pfactor=0.06*75.**2)
+hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=BFGS, minima_threshold=4.0e-3, fmax=1e-02, fmax2=0.1, 
+mdmin=200, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., pfactor=0.06*75.**2, k1=10., rt1=0.05, k2=20., rt2=1.5)
 hop(totalsteps=100)
 

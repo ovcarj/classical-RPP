@@ -39,7 +39,11 @@ class MinimaHopping:
         'fmax2': 0.1,  # eV/A, max force for geometry optimization
         'externalstress': 1e-1, # ev/A^3, the external stress tensor or scalar representing pressure.
         'ttime': 25.,  # fs, time constant for temperature coupling
-        'pfactor': 0.6 * 75.**2}  # constant in the barostat differential equation
+        'pfactor': 0.6 * 75.**2, # constant in the barostat differential equation
+        'k1': 15., # eV/A**2, spring constant for Hookean constraint between nearest neighbouring inorganic atoms
+        'rt1': 0.01, # A, activate Hookean constraint if the bond between inorganic atoms lengthens for this amount
+        'k2': 15., # eV/A**2, spring constant for Hookean constraint between pairs of Br atoms from different layers
+        'rt2': 1.5} # A, activate Hookean constraint if the distance between pairs of Br atoms increases by this amount
 
 
     def __init__(self, atoms, **kwargs):
@@ -367,9 +371,9 @@ class MinimaHopping:
         """Puts Hookean constraint on Pb atoms."""
 #        self._Pb_positions = self._atoms.positions[self._Pb_indices]
 #        self._Br_positions = self._atoms.positions[self._Br_indices]
-        constraints_inorganic_Hookean = [Hookean(a1=int(self._Pb_indices[i]), a2=int(j), rt=self._atoms.get_distances(int(self._Pb_indices[i]), int(j), mic=True) + 0.01, k=20.) for i in range(len(self._Pb_indices)) for j in self._indices_list[i]]
-        constraint_Br1 = [Hookean(a1=self._Br_index1, a2=self._Br_index4, rt=self._atoms.get_distances(self._Br_index1, self._Br_index4, mic=True) + 1.5, k=20.)]
-        constraint_Br2 = [Hookean(a1=self._Br_index2, a2=self._Br_index3, rt=self._atoms.get_distances(self._Br_index2, self._Br_index3, mic=True) + 1.5, k=20.)]
+        constraints_inorganic_Hookean = [Hookean(a1=int(self._Pb_indices[i]), a2=int(j), rt=self._atoms.get_distances(int(self._Pb_indices[i]), int(j), mic=True) + self._rt1, k=self._k1) for i in range(len(self._Pb_indices)) for j in self._indices_list[i]]
+        constraint_Br1 = [Hookean(a1=self._Br_index1, a2=self._Br_index4, rt=self._atoms.get_distances(self._Br_index1, self._Br_index4, mic=True) + self._rt2, k=self._k2)]
+        constraint_Br2 = [Hookean(a1=self._Br_index2, a2=self._Br_index3, rt=self._atoms.get_distances(self._Br_index2, self._Br_index3, mic=True) + self._rt2, k=self._k2)]
 
 #        Pb_z = self._Pb_positions[:,2]
 #        Pb_average_z = np.average(Pb_z)
