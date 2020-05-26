@@ -153,6 +153,6 @@ print('Final potential energy: ' + str(energy_f))
 #print('Starting global optimization...')
 
 hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=BFGS, minima_threshold=4.0e-3, fmax=1e-02, fmax2=0.1, 
-mdmin=200, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., pfactor=0.06*75.**2, k1=10., rt1=0.05, k2=20., rt2=1.5)
+mdmin=200, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., pfactor=0.06*75.**2, k1=10., rt1=0.01, k2=20., rt2=1.5)
 hop(totalsteps=100)
 
