@@ -20,28 +20,14 @@ from ase.constraints import ExpCellFilter, UnitCellFilter
 from ase.io import read, write
 
 charges = np.loadtxt('charges.dat')
-#symbols = np.loadtxt('ordered.xyz', skiprows=2, usecols=0, dtype='str')
 Z_dict = DICT
 
 lammps_data = 'written_data.PREFIX'
 
 filepath = 'in_PREFIXPbBr.in'
 
-#xyz = 'BAPbBr_vnl.xyz'
-#cell = np.loadtxt('cell_BAPbBr.dat')
-
 atoms = read(lammps_data, format='lammps-data', units='real', Z_of_type=Z_dict)
-#atoms.symbols = symbols
-masses = atoms.get_masses()
-#print(masses)
-#print(atoms.get_cell())
-
-#atoms.set_cell(cell)
-#atoms.set_initial_charges(charges)
 atoms.set_pbc(True)
-
-#print(atoms.get_initial_charges())
-#print(atoms.get_cell())
 
 file = open(filepath, 'r')
 
@@ -82,9 +68,6 @@ file.close()
 
 for i in range(0, len(charges)):
     amendments.append('set atom ' + str(int(i+1)) + ' charge ' + str(charges[i]))
-
-#for i in range(0, len(numbers)):
-#    amendments.append('mass ' + str(int(i+1)) + ' ' + str(atomic_masses[numbers[i]]))
 
 lammps = LAMMPSlib(lmpcmds=cmds, lammps_header=header, amendments=amendments, log_file='asela.log', keep_alive=True, create_atoms=False, create_box=False, boundary=False)
 
