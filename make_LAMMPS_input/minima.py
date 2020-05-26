@@ -33,7 +33,7 @@ filepath = 'in_PREFIXPbBr.in'
 atoms = read(lammps_data, format='lammps-data', units='real', Z_of_type=Z_dict)
 #atoms.symbols = symbols
 masses = atoms.get_masses()
-print(masses)
+#print(masses)
 #print(atoms.get_cell())
 
 #atoms.set_cell(cell)
