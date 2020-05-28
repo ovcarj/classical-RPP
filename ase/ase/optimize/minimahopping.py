@@ -33,10 +33,11 @@ class MinimaHopping:
         'logfile': 'hop.log',  # text log
         'minima_threshold': 0.5e-3,  # A, cosine distance threshold for identical configs
         'timestep': 1.0,  # fs, timestep for MD simulations
-        'optimizer': QuasiNewton,  # local optimizer to use
+        'optimizer': FIRE,  # local optimizer to use
         'minima_traj': 'minima.traj',  # storage file for minima list
         'fmax': 0.05,  # eV/A, max force for cell optimization
         'fmax2': 0.1,  # eV/A, max force for geometry optimization
+        'initial_fmax': 0.05, # ev/A, max force for initial cell optimization
         'externalstress': 1e-1, # ev/A^3, the external stress tensor or scalar representing pressure.
         'ttime': 25.,  # fs, time constant for temperature coupling
         'pfactor': 0.6 * 75.**2, # constant in the barostat differential equation
@@ -77,7 +78,7 @@ class MinimaHopping:
         self._Br_positions = self._atoms.positions[self._Br_indices]
         self._inorganic_indices = np.concatenate((self._Pb_indices, self._Br_indices))
         self._inorganic_positions = self._atoms.positions[self._inorganic_indices]
-        #make list for distances of Pb atoms and 4 surrounding Br
+        #make list for distances of Pb atoms and 6 surrounding Br
 #        self._distances_list = np.empty((len(self._Pb_indices), 6))
         self._indices_list = np.empty((len(self._Pb_indices), 6), dtype='int')
 
@@ -127,7 +128,7 @@ class MinimaHopping:
             self._previous_optimum = self._atoms.copy()
             self._previous_energy = self._atoms.get_potential_energy()
             self._molecular_dynamics()
-            self._optimize()
+            self._optimize(self._fmax)
             self._counter += 1
             self._check_results()
 
@@ -161,7 +162,7 @@ class MinimaHopping:
                           'minima: %s' % (len(self._minima),
                                           self._minima_traj))
             self._constrain() #added by me
-            self._optimize()
+            self._optimize(self._initial_fmax)
             self._check_results()
             self._counter += 1
 
@@ -327,7 +328,7 @@ class MinimaHopping:
         f.write(line + '\n')
         f.close()
 
-    def _optimize(self):
+    def _optimize(self, cell_opt_fmax):
         """Perform an optimization."""
 #        del self._atoms.constraints
         self._atoms.set_momenta(np.zeros(self._atoms.get_momenta().shape))
@@ -338,7 +339,7 @@ class MinimaHopping:
                               trajectory='qn%05i.traj' % self._counter,
                               logfile='qn%05i.log' % self._counter)
         self._log('msg', 'Optimization: qn%05i' % self._counter)
-        opt.run(fmax=self._fmax)
+        opt.run(fmax=cell_opt_fmax)
         self._log('ene')
         del self._atoms.constraints
         tri_mat, coord_transform = convert_cell_4NPT(self._atoms.get_cell())
