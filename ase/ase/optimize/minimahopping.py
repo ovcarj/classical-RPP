@@ -44,8 +44,8 @@ class MinimaHopping:
         'k1': 15., # eV/A**2, spring constant for Hookean constraint between nearest neighbouring inorganic atoms
         'rt1': 0.01, # A, activate Hookean constraint if the bond between inorganic atoms lengthens for this amount
         'k2': 15., # eV/A**2, spring constant for Hookean constraint between pairs of Br atoms from different layers
-        'rt2': 1.5} # A, activate Hookean constraint if the distance between pairs of Br atoms increases by this amount
-
+        'rt2': 1.5, # A, activate Hookean constraint if the distance between pairs of Br atoms increases by this amount
+        'constrain_bool': False} # should constraints be activated
 
     def __init__(self, atoms, **kwargs):
         """Initialize with an ASE atoms object and keyword arguments."""
@@ -161,7 +161,8 @@ class MinimaHopping:
                 self._log('msg', 'Using existing minima file with %i prior '
                           'minima: %s' % (len(self._minima),
                                           self._minima_traj))
-            self._constrain() #added by me
+            if self._constrain_bool == True:
+                self._constrain() #added by me
             self._optimize(self._initial_fmax)
             self._check_results()
             self._counter += 1
@@ -330,7 +331,6 @@ class MinimaHopping:
 
     def _optimize(self, cell_opt_fmax):
         """Perform an optimization."""
-#        del self._atoms.constraints
         self._atoms.set_momenta(np.zeros(self._atoms.get_momenta().shape))
         geo_opt = FIRE(self._atoms)
         geo_opt.run(fmax=self._fmax2)
@@ -341,7 +341,8 @@ class MinimaHopping:
         self._log('msg', 'Optimization: qn%05i' % self._counter)
         opt.run(fmax=cell_opt_fmax)
         self._log('ene')
-        del self._atoms.constraints
+        if self._constrain_bool == True:
+            del self._atoms.constraints
         tri_mat, coord_transform = convert_cell_4NPT(self._atoms.get_cell())
         self._atoms.set_positions([np.matmul(coord_transform, position) for position in self._atoms.get_positions()])
         self._atoms.set_cell(tri_mat.transpose())
@@ -423,7 +424,8 @@ class MinimaHopping:
                                          force_temp=True)
         traj = io.Trajectory('md%05i.traj' % self._counter, 'a',
                              self._atoms)
-        self._constrain()
+        if self._constrain_bool == True:
+            self._constrain()
         dyn = NPT(self._atoms, timestep=self._timestep * units.fs, temperature=self._temperature * units.kB, externalstress=self._externalstress, ttime=self._ttime*units.fs, pfactor=self._pfactor*units.fs**2)
 #        dyn = NPTber(self._atoms, timestep=self._timestep * units.fs, temperature=self._temperature, fixcm=True, pressure=self._pressure, taut=self._taut * units.fs, taup=self._taup * units.fs, compressibility=self._compressibility)
         log = MDLogger(dyn, self._atoms, 'md%05i.log' % self._counter,
@@ -431,9 +433,7 @@ class MinimaHopping:
         dyn.attach(log, interval=1)
         dyn.attach(traj, interval=100)
         while mincount < self._mdmin:
-#            self._constrain()
             dyn.run(1)
-#            del self._atoms.constraints
             energies.append(self._atoms.get_potential_energy())
             passedmin = self._passedminimum(energies)
             if passedmin:

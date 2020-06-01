@@ -33,13 +33,18 @@ class MinimaHopping:
         'logfile': 'hop.log',  # text log
         'minima_threshold': 0.5e-3,  # A, cosine distance threshold for identical configs
         'timestep': 1.0,  # fs, timestep for MD simulations
-        'optimizer': QuasiNewton,  # local optimizer to use
+        'optimizer': FIRE,  # local optimizer to use
         'minima_traj': 'minima.traj',  # storage file for minima list
         'fmax': 0.05,  # eV/A, max force for cell optimization
         'fmax2': 0.1,  # eV/A, max force for geometry optimization
+        'initial_fmax': 0.05, # ev/A, max force for initial cell optimization
         'externalstress': 1e-1, # ev/A^3, the external stress tensor or scalar representing pressure.
         'ttime': 25.,  # fs, time constant for temperature coupling
-        'pfactor': 0.6 * 75.**2}  # constant in the barostat differential equation
+        'pfactor': 0.6 * 75.**2, # constant in the barostat differential equation
+        'k1': 15., # eV/A**2, spring constant for Hookean constraint between nearest neighbouring inorganic atoms
+        'rt1': 0.01, # A, activate Hookean constraint if the bond between inorganic atoms lengthens for this amount
+        'k2': 15., # eV/A**2, spring constant for Hookean constraint between pairs of Br atoms from different layers
+        'rt2': 1.5} # A, activate Hookean constraint if the distance between pairs of Br atoms increases by this amount
 
 
     def __init__(self, atoms, **kwargs):
@@ -66,9 +71,41 @@ class MinimaHopping:
                      pbc=[True, True, True], sigma=0.05, nsigma=4,
                      recalculate=False)
 
-        #Pb indices and positions for Hookean constraints
+        #inorganic indices and positions for Hookean constraints
         self._Pb_indices = np.where(self._atoms.symbols == 'Pb')[0]
         self._Pb_positions = self._atoms.positions[self._Pb_indices]
+        self._Br_indices = np.where(self._atoms.symbols == 'Br')[0]
+        self._Br_positions = self._atoms.positions[self._Br_indices]
+        self._inorganic_indices = np.concatenate((self._Pb_indices, self._Br_indices))
+        self._inorganic_positions = self._atoms.positions[self._inorganic_indices]
+        #make list for distances of Pb atoms and 6 surrounding Br
+#        self._distances_list = np.empty((len(self._Pb_indices), 6))
+        self._indices_list = np.empty((len(self._Pb_indices), 6), dtype='int')
+
+        for i in range(len(self._Pb_indices)):
+            distances = self._atoms.get_distances(self._Pb_indices[i], self._Br_indices, mic=True)
+#            self._distances_list[i] = distances[np.argsort(distances)[:6]]
+            self._indices_list[i] = self._Br_indices[np.argsort(distances)[:6]]
+
+        #find pairs of 2 Br's closest in z-direction and furthest in z-direction
+        average_Br_z = np.average(self._Br_positions[:,2])
+        top_Br = self._Br_indices[np.where(self._Br_positions[:,2] > average_Br_z)]
+        bottom_Br = self._Br_indices[np.where(self._Br_positions[:,2] < average_Br_z)]
+        #Br groups are labelled 1,2,3,4 from bottom to top so 1-4 and 2-3 should be paired
+        Br_group1 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[:4]]
+        Br_group2 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[-4:]]
+        Br_group3 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[:4]]
+        Br_group4 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[-4:]]
+
+        self._Br_index1 = int(Br_group1[0])
+        Br_relative1 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group4]
+        self._Br_index4 = int(Br_group4[np.argmin(np.linalg.norm(Br_relative1[:,:2], axis=1))])
+
+        Br_relative2 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group2]
+        self._Br_index2 = int(Br_group2[np.argmin(np.linalg.norm(Br_relative2[:,:2], axis=1))])
+
+        Br_relative3 = self._atoms.positions[self._Br_index2] - self._atoms.positions[Br_group3]
+        self._Br_index3 = int(Br_group3[np.argmin(np.linalg.norm(Br_relative3[:,:2], axis=1))])
 
     def __call__(self, totalsteps=None, maxtemp=None):
         """Run the minima hopping algorithm. Can specify stopping criteria
@@ -91,7 +128,7 @@ class MinimaHopping:
             self._previous_optimum = self._atoms.copy()
             self._previous_energy = self._atoms.get_potential_energy()
             self._molecular_dynamics()
-            self._optimize()
+            self._optimize(self._fmax)
             self._counter += 1
             self._check_results()
 
@@ -124,7 +161,8 @@ class MinimaHopping:
                 self._log('msg', 'Using existing minima file with %i prior '
                           'minima: %s' % (len(self._minima),
                                           self._minima_traj))
-            self._optimize()
+            self._constrain() #added by me
+            self._optimize(self._initial_fmax)
             self._check_results()
             self._counter += 1
 
@@ -290,7 +328,7 @@ class MinimaHopping:
         f.write(line + '\n')
         f.close()
 
-    def _optimize(self):
+    def _optimize(self, cell_opt_fmax):
         """Perform an optimization."""
 #        del self._atoms.constraints
         self._atoms.set_momenta(np.zeros(self._atoms.get_momenta().shape))
@@ -301,8 +339,9 @@ class MinimaHopping:
                               trajectory='qn%05i.traj' % self._counter,
                               logfile='qn%05i.log' % self._counter)
         self._log('msg', 'Optimization: qn%05i' % self._counter)
-        opt.run(fmax=self._fmax)
+        opt.run(fmax=cell_opt_fmax)
         self._log('ene')
+        del self._atoms.constraints
         tri_mat, coord_transform = convert_cell_4NPT(self._atoms.get_cell())
         self._atoms.set_positions([np.matmul(coord_transform, position) for position in self._atoms.get_positions()])
         self._atoms.set_cell(tri_mat.transpose())
@@ -331,18 +370,24 @@ class MinimaHopping:
 
     def _constrain(self):
         """Puts Hookean constraint on Pb atoms."""
-        self._Pb_positions = self._atoms.positions[self._Pb_indices]
-        Pb_z = self._Pb_positions[:,2]
-        Pb_average_z = np.average(Pb_z)
-        Pb_upper_indices = self._Pb_indices[np.where(Pb_z > Pb_average_z)]
-        Pb_bottom_indices = self._Pb_indices[np.where(Pb_z < Pb_average_z)]
-        constraint_fix = [FixAtoms(indices=[Pb_upper_indices[0]])]
-        constraint_upper_to_fix = [Hookean(a1=Pb_upper_indices[0], a2=int(i), rt=self._atoms.get_distance(Pb_upper_indices[0], i, mic=True) + 0.1, k=5.) for i in Pb_upper_indices[1:]]
-        constraint_upper = [Hookean(a1=int(i), a2=int(j), rt=self._atoms.get_distance(i, j, mic=True) + 0.1, k=5.) for i in Pb_upper_indices[1:] for j in Pb_upper_indices[1:] if i < j]
-        constraint_bottom = [Hookean(a1=int(i), a2=int(j), rt=self._atoms.get_distance(i, j, mic=True) + 0.1, k=5.) for i in Pb_bottom_indices for j in Pb_bottom_indices if i < j]
-        constraints_non_flat = [constrain for constrain in [constraint_fix, constraint_upper_to_fix, constraint_upper, constraint_bottom] if constrain != []]
+#        self._Pb_positions = self._atoms.positions[self._Pb_indices]
+#        self._Br_positions = self._atoms.positions[self._Br_indices]
+        constraints_inorganic_Hookean = [Hookean(a1=int(self._Pb_indices[i]), a2=int(j), rt=self._atoms.get_distances(int(self._Pb_indices[i]), int(j), mic=True) + self._rt1, k=self._k1) for i in range(len(self._Pb_indices)) for j in self._indices_list[i]]
+        constraint_Br1 = [Hookean(a1=self._Br_index1, a2=self._Br_index4, rt=self._atoms.get_distances(self._Br_index1, self._Br_index4, mic=True) + self._rt2, k=self._k2)]
+        constraint_Br2 = [Hookean(a1=self._Br_index2, a2=self._Br_index3, rt=self._atoms.get_distances(self._Br_index2, self._Br_index3, mic=True) + self._rt2, k=self._k2)]
+
+#        Pb_z = self._Pb_positions[:,2]
+#        Pb_average_z = np.average(Pb_z)
+#        Pb_upper_indices = self._Pb_indices[np.where(Pb_z > Pb_average_z)]
+#        Pb_bottom_indices = self._Pb_indices[np.where(Pb_z < Pb_average_z)]
+#        constraint_fix = [FixAtoms(indices=[Pb_upper_indices[0]])]
+#        constraint_upper_to_fix = [Hookean(a1=Pb_upper_indices[0], a2=int(i), rt=self._atoms.get_distance(Pb_upper_indices[0], i, mic=True) + 0.1, k=5.) for i in Pb_upper_indices[1:]]
+#        constraint_upper = [Hookean(a1=int(i), a2=int(j), rt=self._atoms.get_distance(i, j, mic=True) + 0.1, k=5.) for i in Pb_upper_indices[1:] for j in Pb_upper_indices[1:] if i < j]
+#        constraint_bottom = [Hookean(a1=int(i), a2=int(j), rt=self._atoms.get_distance(i, j, mic=True) + 0.1, k=5.) for i in Pb_bottom_indices for j in Pb_bottom_indices if i < j]
+        constraints_non_flat = [constrain for constrain in [constraints_inorganic_Hookean, constraint_Br1, constraint_Br2] if constrain != []]
         constraints = [item for sublist in constraints_non_flat for item in sublist]
 #        constraints = [Hookean(a1=self._Pb_indices[i], a2=self._Pb_positions[i], rt=0.01, k=15.) for i in range(len(self._Pb_indices))]
+#        self._atoms.set_constraint(constraints)
         self._atoms.set_constraint(constraints)
 #        print(atoms.constraints)
 
@@ -378,13 +423,13 @@ class MinimaHopping:
                                          force_temp=True)
         traj = io.Trajectory('md%05i.traj' % self._counter, 'a',
                              self._atoms)
-#        self._constrain()
+        self._constrain()
         dyn = NPT(self._atoms, timestep=self._timestep * units.fs, temperature=self._temperature * units.kB, externalstress=self._externalstress, ttime=self._ttime*units.fs, pfactor=self._pfactor*units.fs**2)
 #        dyn = NPTber(self._atoms, timestep=self._timestep * units.fs, temperature=self._temperature, fixcm=True, pressure=self._pressure, taut=self._taut * units.fs, taup=self._taup * units.fs, compressibility=self._compressibility)
         log = MDLogger(dyn, self._atoms, 'md%05i.log' % self._counter,
                        header=True, stress=False, peratom=False)
         dyn.attach(log, interval=1)
-        dyn.attach(traj, interval=1)
+        dyn.attach(traj, interval=100)
         while mincount < self._mdmin:
 #            self._constrain()
             dyn.run(1)
