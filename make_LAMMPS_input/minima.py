@@ -85,50 +85,24 @@ print('Calculator set!')
 energy_i = atoms.get_potential_energy()
 print('Starting potential energy: ' + str(energy_i))
 
-#dyn = FIRE(atoms, trajectory='PREFIX_opt.traj')
+#opt = FIRE(atoms, trajectory='PREFIX_opt.traj')
 
-#dyn.run(fmax=5e-03)
+#opt.run(fmax=5e-01)
 
 #ecf = ExpCellFilter(atoms)
 
 #qn = FIRE(ecf)
 
-#traj = Trajectory('PREFIX_copt.traj', 'w', atoms)
-#qn.attach(traj)
+#cell_traj = Trajectory('PREFIX_copt.traj', 'w', atoms)
+#qn.attach(cell_traj)
 #qn.run(fmax=0.05)
 
-#atoms2 = read('PREFIX_copt.traj', index=-1)
-#atoms2.set_calculator(lammps)
-#cell2 = atoms2.get_cell()
-#cell2[np.abs(cell2) < 1e-03] = 0.0
-#atoms2.set_cell(cell2)
+#Temp = 300
+#MaxwellBoltzmannDistribution(atoms, temp=Temp*units.kB)
 
-#MaxwellBoltzmannDistribution(atoms, temp=300*units.kB)
-
-#dyn2 = NPTber(atoms, timestep=1 * units.fs, temperature=300, fixcm=True, pressure=1.01325, taut=1e3 * units.fs, taup=1e3 * units.fs, compressibility=0.001)#, taut=1000. * units.fs, pressure=1.01325, taup=1000. * units.fs, compressibility=0.01)
-
-#npt_log = Trajectory('npt_log.traj', 'w', atoms)
-#dyn2.attach(npt_log.write)
-
-#dyn2.attach(MDLogger(dyn, atoms, 'md.log', header=False, stress=False, peratom=True, mode="a"), interval=1000)
-#dyn2 = NPT(atoms, timestep=1*units.fs, temperature=300, externalstress=1e-5, ttime=1000*units.fs,pfactor=0.05, trajectory='NPT.traj')
-#dyn2.run(1000)
-
-#npt_log.close()
-
-
-#dump_interval = 10000
-#traj_file = 'BFGS_log.traj'
-
-#traj_writer = Trajectory(traj_file, 'w', atoms)
-#dyn.attach(traj_writer.write, interval=dump_interval)
-
-#dyn.run()
-
-#dyn = VelocityVerlet(atoms, 1 * units.fs, trajectory='tmp.traj')
-
-
-#dyn.run(100)
+#npt=NPT(atoms, timestep=0.5*units.fs, temperature=Temp*units.kB, externalstress=0.0,
+#ttime=25*units.fs,pfactor=0.06*75.**2*units.fs**2, trajectory='NPT.traj')
+#npt.run(1000)
 
 energy_f = atoms.get_potential_energy()
 print('Final potential energy: ' + str(energy_f))
