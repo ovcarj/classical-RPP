@@ -1633,6 +1633,10 @@ class Hookean(FixConstraint):
         displace, _ = find_mic(p2 - p1, atoms.cell, atoms.pbc)
         bondlength = np.linalg.norm(displace)
         if bondlength > self.threshold:
+# Prints just for debugging
+#            print('Hookean constraint active, atoms:')
+#            print(self.indices)
+#            print(bondlength)
             magnitude = self.spring * (bondlength - self.threshold)
             direction = displace / np.linalg.norm(displace)
             if self._type == 'two atoms':
@@ -2435,7 +2439,7 @@ class UnitCellFilter(Filter):
             force_consistent=force_consistent)
         return atoms_energy + self.scalar_pressure * self.atoms.get_volume()
 
-    def get_forces(self, apply_constraint=False):
+    def get_forces(self, apply_constraint=True): #edit by me False->True
         """
         returns an array with shape (natoms+3,3) of the atomic forces
         and unit cell stresses.
@@ -2624,7 +2628,7 @@ class ExpCellFilter(UnitCellFilter):
         new2[natoms:] = expm(new[natoms:])
         UnitCellFilter.set_positions(self, new2, **kwargs)
 
-    def get_forces(self, apply_constraint=False):
+    def get_forces(self, apply_constraint=True): #edit by me False -> True
         forces = UnitCellFilter.get_forces(self, apply_constraint)
 
         # forces on atoms are same as UnitCellFilter, we just

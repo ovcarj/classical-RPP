@@ -703,7 +703,7 @@ xz and yz are the tilt of the lattice vectors, all to be edited.
         # I am not sure why we need this next line but LAMMPS will
         # raise an error if it is not there. Perhaps it is needed to
         # ensure the cell stresses are calculated
-        self.lmp.command('thermo_style custom pe pxx emol ecoul')
+        self.lmp.command('thermo_style custom pe ke etotal ebond eangle edihed eimp evdwl ecoul elong press pxx emol')
 
         self.lmp.command('variable fx atom fx')
         self.lmp.command('variable fy atom fy')
