@@ -460,6 +460,7 @@ file.close()
 bash('sed -i "s/PREFIX/' + prefix + '/g" in_template.file')
 bash('cp in_template.file in_' + prefix + 'PbBr.in')
 bash('sed -i "s/PREFIX/' + prefix + '/g" minima.py')
+bash('sed -i "s/PREFIX/' + prefix + '/g" opt.py')
 bash('sed -i "14r tmp_' + prefix + 'PbBr_PairC.dat' + '" in_' + prefix + 'PbBr.in')
 bash('./get_charges.sh ' + prefix)
 
@@ -469,6 +470,7 @@ types = info[4] + small_info[4] + 2
 Z_of_type_dict = MakeTypeDictionary(types)
 
 bash('sed -i "s/DICT/' + Z_of_type_dict + '/g" minima.py')
+bash('sed -i "s/DICT/' + Z_of_type_dict + '/g" opt.py')
 
 #Molecule indexing
 
@@ -495,5 +497,5 @@ bash('rm amber2lammps.sh amber2lammps.py gaussian.sh  gaussian_template.com  get
 #    bash('rm -r ' + small_prefix)
 
 bash('mkdir ready')
-bash('cp -t ready written_data.' + prefix + ' in_' + prefix + 'PbBr.in' + ' *xyz cell*dat charges.dat minima.py' )
-bash('rm *dat* in* minima.py')
+bash('cp -t ready written_data.' + prefix + ' in_' + prefix + 'PbBr.in' + ' *xyz cell*dat charges.dat minima.py opt.py' )
+bash('rm *dat* in* minima.py opt.py')
