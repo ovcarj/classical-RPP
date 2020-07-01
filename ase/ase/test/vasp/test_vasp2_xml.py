@@ -11,10 +11,8 @@ from ase.calculators.vasp import Vasp2 as Vasp
 from ase.io import read
 import numpy as np
 
-assert installed()
 
-
-def test_main():
+def test_main(require_vasp):
     assert installed()
 
     # simple test calculation of CO molecule
@@ -33,7 +31,7 @@ def test_main():
                 lcharg=False,
                 ldipol=True)
 
-    co.set_calculator(calc)
+    co.calc = calc
     energy = co.get_potential_energy()
     forces = co.get_forces()
     dipole_moment = co.get_dipole_moment()

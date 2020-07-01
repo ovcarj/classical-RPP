@@ -1,17 +1,17 @@
-def test_amber():
+import subprocess
+
+from ase import Atoms
+from ase.calculators.amber import Amber
+
+
+def test_amber(calculators):
     """Test that amber calculator works.
 
     This is conditional on the existence of the $AMBERHOME/bin/sander
     executable.
     """
-    import subprocess
 
-    from ase import Atoms
-    from ase.calculators.amber import Amber
-    from ase.test import require
-
-
-    require('amber')
+    calculators.require('amber')
 
     with open('mm.in', 'w') as outfile:
         outfile.write("""\
@@ -50,7 +50,7 @@ def test_amber():
                  topologyfile='2h2o.top',
                  incoordfile='mm.crd')
     calc.write_coordinates(atoms, 'mm.crd')
-    atoms.set_calculator(calc)
+    atoms.calc = calc
 
     e = atoms.get_potential_energy()
     assert abs(e + 0.046799672) < 5e-3

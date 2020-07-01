@@ -1,7 +1,5 @@
 import numpy as np
-import pytest
 
-from ase.test.vasp import installed2 as installed
 from ase.io import read
 from ase.optimize import BFGS
 from ase.build import fcc111
@@ -9,10 +7,7 @@ from ase.constraints import FixAtoms
 from ase.calculators.vasp import Vasp2 as Vasp
 
 
-pytestmark = pytest.mark.skipif(not installed())
-
-
-def create_slab_with_constraints():
+def create_slab_with_constraints(require_vasp):
     slab = fcc111('Al', size=(1, 1, 3), periodic=True)
     slab.center(vacuum=4, axis=2)
     con = FixAtoms(indices=[0, 1])
@@ -20,10 +15,10 @@ def create_slab_with_constraints():
     return slab
 
 
-def test_ase_relax():
+def test_ase_relax(require_vasp):
     slab = create_slab_with_constraints()
     calc = Vasp(xc='LDA', ediffg=-1e-3, lwave=False, lcharg=False)
-    slab.set_calculator(calc)
+    slab.calc = calc
     opt = BFGS(slab, logfile=None)
     opt.run(fmax=0.1, steps=3)
 
@@ -33,7 +28,7 @@ def test_ase_relax():
     assert not np.allclose(res.positions[2], init_slab.positions[2])
 
 
-def test_vasp_relax():
+def test_vasp_relax(require_vasp):
     slab = create_slab_with_constraints()
     calc = Vasp(xc='LDA', isif=0, nsw=3, ibrion=1,
                 ediffg=-1e-3, lwave=False, lcharg=False)

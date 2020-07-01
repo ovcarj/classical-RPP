@@ -1,11 +1,11 @@
 from math import sqrt
 from warnings import warn
-from ase.geometry import find_mic, wrap_positions
-from ase.calculators.calculator import PropertyNotImplementedError
-from ase.utils.parsemath import eval_expression
 
 import numpy as np
-from scipy.linalg import logm, expm
+from ase.calculators.calculator import PropertyNotImplementedError
+from ase.geometry import find_mic, wrap_positions
+from ase.utils.parsemath import eval_expression
+from scipy.linalg import expm, logm
 
 __all__ = [
     'FixCartesian', 'FixBondLength', 'FixedMode',
@@ -1633,10 +1633,6 @@ class Hookean(FixConstraint):
         displace, _ = find_mic(p2 - p1, atoms.cell, atoms.pbc)
         bondlength = np.linalg.norm(displace)
         if bondlength > self.threshold:
-# Prints just for debugging
-#            print('Hookean constraint active, atoms:')
-#            print(self.indices)
-#            print(bondlength)
             magnitude = self.spring * (bondlength - self.threshold)
             direction = displace / np.linalg.norm(displace)
             if self._type == 'two atoms':
@@ -2129,7 +2125,11 @@ class Filter:
         WARNING: The calculator is unaware of this filter, and sees a
         different number of atoms.
         """
-        return self.atoms.get_calculator()
+        return self.atoms.calc
+
+    @property
+    def calc(self):
+        return self.atoms.calc
 
     def get_celldisp(self):
         return self.atoms.get_celldisp()
@@ -2201,7 +2201,7 @@ class StrainFilter(Filter):
         self.atoms.set_cell(np.dot(self.origcell, eps), scale_atoms=True)
         self.strain[:] = new
 
-    def get_forces(self):
+    def get_forces(self, **kwargs):
         stress = self.atoms.get_stress(include_ideal_gas=self.include_ideal_gas)
         return -self.atoms.get_volume() * (stress * self.mask).reshape((2, 3))
 
@@ -2439,7 +2439,7 @@ class UnitCellFilter(Filter):
             force_consistent=force_consistent)
         return atoms_energy + self.scalar_pressure * self.atoms.get_volume()
 
-    def get_forces(self, apply_constraint=True): #edit by me False->True
+    def get_forces(self, **kwargs):
         """
         returns an array with shape (natoms+3,3) of the atomic forces
         and unit cell stresses.
@@ -2449,8 +2449,8 @@ class UnitCellFilter(Filter):
         computed from the stress tensor.
         """
 
-        stress = self.atoms.get_stress(apply_constraint=apply_constraint)
-        atoms_forces = self.atoms.get_forces(apply_constraint=apply_constraint)
+        stress = self.atoms.get_stress(**kwargs)
+        atoms_forces = self.atoms.get_forces(**kwargs)
 
         volume = self.atoms.get_volume()
         virial = -volume * (voigt_6_to_full_3x3_stress(stress) +
@@ -2628,12 +2628,12 @@ class ExpCellFilter(UnitCellFilter):
         new2[natoms:] = expm(new[natoms:])
         UnitCellFilter.set_positions(self, new2, **kwargs)
 
-    def get_forces(self, apply_constraint=True): #edit by me False -> True
-        forces = UnitCellFilter.get_forces(self, apply_constraint)
+    def get_forces(self, **kwargs):
+        forces = UnitCellFilter.get_forces(self, **kwargs)
 
         # forces on atoms are same as UnitCellFilter, we just
         # need to modify the stress contribution
-        stress = self.atoms.get_stress(apply_constraint=apply_constraint)
+        stress = self.atoms.get_stress(**kwargs)
         volume = self.atoms.get_volume()
         virial = -volume * (voigt_6_to_full_3x3_stress(stress) +
                             np.diag([self.scalar_pressure] * 3))
@@ -2663,9 +2663,12 @@ class ExpCellFilter(UnitCellFilter):
 
         # check for reasonable alignment between naive and
         # exact search directions
-        if (np.sum(deform_grad_log_force * deform_grad_log_force_naive) /
-            np.sqrt(np.sum(deform_grad_log_force**2) *
-                    np.sum(deform_grad_log_force_naive**2)) > 0.8):
+        all_are_equal = np.all(np.isclose(deform_grad_log_force,
+                                          deform_grad_log_force_naive))
+        if all_are_equal or \
+            (np.sum(deform_grad_log_force * deform_grad_log_force_naive) /
+             np.sqrt(np.sum(deform_grad_log_force**2) *
+                     np.sum(deform_grad_log_force_naive**2)) > 0.8):
             deform_grad_log_force = deform_grad_log_force_naive
 
         # Cauchy stress used for convergence testing

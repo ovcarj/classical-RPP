@@ -1,4 +1,4 @@
-def test_vasp2_check_state():
+def test_vasp2_check_state(require_vasp):
     """
     Run tests to ensure that the VASP check_state() function call works correctly,
     i.e. correctly sets the working directories and works in that directory.
@@ -38,7 +38,7 @@ def test_vasp2_check_state():
 
     calc = Vasp(**settings)
 
-    atoms.set_calculator(calc)
+    atoms.calc = calc
 
     en1 = atoms.get_potential_energy()
 

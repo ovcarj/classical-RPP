@@ -1,4 +1,4 @@
-def test_vasp_co():
+def test_vasp_co(require_vasp):
     """
     Run some VASP tests to ensure that the VASP calculator works. This
     is conditional on the existence of the VASP_COMMAND or VASP_SCRIPT
@@ -34,7 +34,7 @@ def test_vasp_co():
                 lwave = False,
                 lcharg = False)
 
-    co.set_calculator(calc)
+    co.calc = calc
     en = co.get_potential_energy()
     write('vasp_co.traj', co)
     assert abs(en + 14.918933) < 5e-3

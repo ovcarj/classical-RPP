@@ -1,11 +1,14 @@
-def test_Pt_stress_cellopt():
-    import numpy as np
-    from numpy.testing import assert_allclose
-    from ase.calculators.lammpsrun import LAMMPS
-    from ase.build import bulk
-    from ase.test.eam_pot import Pt_u3
-    from ase.constraints import ExpCellFilter
-    from ase.optimize import BFGS
+import numpy as np
+from numpy.testing import assert_allclose
+import pytest
+from ase.build import bulk
+from ase.test.eam_pot import Pt_u3
+from ase.constraints import ExpCellFilter
+from ase.optimize import BFGS
+
+
+@pytest.mark.calculator('lammpsrun')
+def test_Pt_stress_cellopt(factory):
 
     # (For now) reuse eam file stuff from other lammps test:
     pot_fn = 'Pt_u3.eam'
@@ -15,7 +18,7 @@ def test_Pt_stress_cellopt():
     params = {}
     params['pair_style'] = 'eam'
     params['pair_coeff'] = ['1 1 {}'.format(pot_fn)]
-    with LAMMPS(specorder=['Pt'], files=[pot_fn], **params) as calc:
+    with factory.calc(specorder=['Pt'], files=[pot_fn], **params) as calc:
         rng = np.random.RandomState(17)
 
         atoms = bulk('Pt') * (2, 2, 2)
@@ -27,16 +30,16 @@ def test_Pt_stress_cellopt():
                         atol=1e-4, rtol=1e-4)
 
         opt = BFGS(ExpCellFilter(atoms), trajectory='opt.traj')
-        for i, _ in enumerate(opt.irun(fmax=0.05)):
+        for i, _ in enumerate(opt.irun(fmax=0.001)):
             pass
 
-        cell1_ref = np.array([
-            [0.16298762, 3.89912471, 3.92825365],
-            [4.21007577, 0.63362427, 5.04668170],
-            [4.42895706, 3.29171414, 0.44623618]])
+        cell1_ref = np.array(
+            [[0.16524, 3.8999, 3.92855],
+             [4.211015, 0.634928, 5.047811],
+             [4.429529, 3.293805, 0.447377]]
+        )
 
-
-        assert_allclose(np.asarray(atoms.cell), cell1_ref, atol=1e-4, rtol=1e-4)
+        assert_allclose(np.asarray(atoms.cell), cell1_ref, atol=3e-4, rtol=3e-4)
         assert_allclose(atoms.get_stress(), calc.calculate_numerical_stress(atoms),
                         atol=1e-4, rtol=1e-4)
 
