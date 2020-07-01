@@ -70,6 +70,37 @@ def convert_cell(ase_cell):
     else:
         return cell, None
 
+def convert_cell_4NPT(ase_cell):
+    """
+    Convert a parallelepiped (forming right hand basis)
+    to upper triangular matrix NPT can accept. This
+    function transposes cell matrix so the bases are column vectors
+    """
+    cell = ase_cell.T
+
+    if not is_upper_triangular(cell.T):
+        # rotate bases into triangular matrix
+        tri_mat = np.zeros((3, 3))
+        A = cell[:, 0]
+        B = cell[:, 1]
+        C = cell[:, 2]
+        tri_mat[2, 2] = norm(C)
+        Chat = C / norm(C)
+        CxBhat = np.cross(C, B) / norm(np.cross(C, B))
+        tri_mat[2,1] = np.dot(B, Chat)
+        tri_mat[1,1] = norm(np.cross(Chat, B)) 
+        tri_mat[2,0] = np.dot(A, Chat)
+        tri_mat[1,0] = np.dot(A, np.cross(CxBhat, Chat))
+        tri_mat[0,0] = norm(np.dot(A, CxBhat))
+        # create and save the transformation for coordinates
+        volume = np.linalg.det(ase_cell)
+        trans = np.array([np.cross(B, C), np.cross(C, A), np.cross(A, B)])
+        trans /= volume
+        coord_transform = np.dot(tri_mat, trans)
+
+        return tri_mat, coord_transform
+    else:
+        return cell, None
 
 class LAMMPSlib(Calculator):
     r"""
@@ -672,7 +703,7 @@ xz and yz are the tilt of the lattice vectors, all to be edited.
         # I am not sure why we need this next line but LAMMPS will
         # raise an error if it is not there. Perhaps it is needed to
         # ensure the cell stresses are calculated
-        self.lmp.command('thermo_style custom pe pxx emol ecoul')
+        self.lmp.command('thermo_style custom pe ke etotal ebond eangle edihed eimp evdwl ecoul elong press pxx emol')
 
         self.lmp.command('variable fx atom fx')
         self.lmp.command('variable fy atom fy')

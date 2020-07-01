@@ -114,10 +114,10 @@ class OFPComparator(object):
             raise Exception('The two configurations are not the same size.')
 
         # first we check the energy criteria
-        if a1.calc is not None and a2.calc is not None:
-            dE = abs(a1.get_potential_energy() - a2.get_potential_energy())
-            if dE >= self.dE:
-                return False
+#        if a1.calc is not None and a2.calc is not None:
+#            dE = abs(a1.get_potential_energy() - a2.get_potential_energy())
+#            if dE >= self.dE:
+#                return False
 
         # then we check the structure
         cos_dist = self._compare_structure(a1, a2)
