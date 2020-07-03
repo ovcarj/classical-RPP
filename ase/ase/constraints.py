@@ -1,5 +1,6 @@
 from math import sqrt
 from warnings import warn
+from ase.neighborlist import NeighborList
 
 import numpy as np
 from ase.calculators.calculator import PropertyNotImplementedError
@@ -1588,6 +1589,8 @@ class Hookean(FixConstraint):
             raise RuntimeError('Unknown type for a2')
         self.threshold = rt
         self.spring = k
+        self.force1 = 0.0
+        self.force2 = 0.0
 
     def todict(self):
         dct = {'name': 'Hookean'}
@@ -1640,6 +1643,23 @@ class Hookean(FixConstraint):
                 forces[self.indices[1]] -= direction * magnitude
             else:
                 forces[self.index] += direction * magnitude
+
+    def adjust_stress(self, atoms, stress):
+        positions = atoms.positions
+        if self._type == 'two atoms':
+            p1, p2 = positions[self.indices]
+        displace, _ = find_mic(p2 - p1, atoms.cell, atoms.pbc)
+        bondlength = np.linalg.norm(displace)
+        if bondlength > self.threshold:
+            if self._type == 'two atoms':
+                magnitude = self.spring * (bondlength - self.threshold)
+                direction = displace / np.linalg.norm(displace)
+                force = direction * magnitude
+#                force2 = -direction * magnitude
+#                contribution = 1.0*(np.outer(force1, displace) + 
+#                np.outer(force2, -displace)) / atoms.get_volume()
+                contribution = 2.0 * np.outer(force, displace) / atoms.get_volume()
+                stress += full_3x3_to_voigt_6_stress(contribution)
 
     def adjust_potential_energy(self, atoms):
         """Returns the difference to the potential energy due to an active
