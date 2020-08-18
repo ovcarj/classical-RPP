@@ -248,6 +248,7 @@ class NPT(MolecularDynamics):
                     "You have modified the atoms since the last timestep.")
 
         for i in range(steps):
+#            print(self.get_gibbs_free_energy())
             self.step()
             self.nsteps += 1
             self.call_observers()

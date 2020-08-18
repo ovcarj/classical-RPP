@@ -1655,10 +1655,7 @@ class Hookean(FixConstraint):
                 magnitude = self.spring * (bondlength - self.threshold)
                 direction = displace / np.linalg.norm(displace)
                 force = direction * magnitude
-#                force2 = -direction * magnitude
-#                contribution = 1.0*(np.outer(force1, displace) + 
-#                np.outer(force2, -displace)) / atoms.get_volume()
-                contribution = 2.0 * np.outer(force, displace) / atoms.get_volume()
+                contribution = 1.0 * np.outer(force, displace) / atoms.get_volume()
                 stress += full_3x3_to_voigt_6_stress(contribution)
 
     def adjust_potential_energy(self, atoms):
