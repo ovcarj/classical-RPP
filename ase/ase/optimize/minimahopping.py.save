@@ -239,7 +239,7 @@ class MinimaHopping:
         if len(self._minima) == 0:
             self._log('msg', 'Found a new minimum.')
             self._log('msg', 'Accepted new minimum.')
-            self._record_first_minimum()
+            self._record_minimum()
             self._log('par')
             return
 
@@ -341,7 +341,6 @@ class MinimaHopping:
         tri_mat, coord_transform = convert_cell_4NPT(self._atoms.get_cell())
         self._atoms.set_positions([np.matmul(coord_transform, position) for position in self._atoms.get_positions()])
         self._atoms.set_cell(tri_mat.transpose())
-        self._atoms.get_potential_energy()
 
     def _constrain(self):
         """Puts Hookean constraint on Pb atoms."""
@@ -417,13 +416,6 @@ class MinimaHopping:
         # Reset atoms to minimum point.
         self._atoms.positions = oldpositions[passedmin[0]]
 
-    def _record_first_minimum(self):
-        """Temporary kludge to write first minimum because otherwise it doesn't write its energy..."""
-        write(self._minima_traj, self._atoms)
-        self._minima_energies.append(self._atoms.get_potential_energy())
-        self._read_minima()
-        self._log('msg', 'Recorded minima #%i.' % (len(self._minima) - 1))
-
     def _record_minimum(self):
         """Adds the current atoms configuration to the minima list."""
         traj = io.Trajectory(self._minima_traj, 'a')
@@ -450,10 +442,10 @@ class MinimaHopping:
     def _replace_minimum(self, similar_index):
         """Replaces minimum that looks similar and has lower energy with current candidate."""
         minima_trajectory = read(self._minima_traj, index=':')
-        minima_trajectory[similar_index] = self._atoms #.copy()
-        self._minima_energies[similar_index] = self._atoms.get_potential_energy()
+        minima_trajectory[similar_index] = self._atoms.copy()
         write(self._minima_traj, minima_trajectory)
         self._read_minima()
+        self._minima_energies[similar_index] = self._atoms.get_potential_energy()
         self._log('msg', 'Replaced minima #%i.' % similar_index)
 
 class PassedMinimum:

@@ -69,7 +69,7 @@ file.close()
 for i in range(0, len(charges)):
     amendments.append('set atom ' + str(int(i+1)) + ' charge ' + str(charges[i]))
 
-lammps = LAMMPSlib(lmpcmds=cmds, lammps_header=header, amendments=amendments, log_file='asela.log', keep_alive=True, create_atoms=False, create_box=False, boundary=False)
+lammps = LAMMPSlib(lmpcmds=cmds, lammps_header=header, amendments=amendments, log_file=None, keep_alive=True, create_atoms=False, create_box=False, boundary=False)
 
 print('Done with reading LAMMPS file.')
 #print(header)
@@ -109,10 +109,10 @@ print('Final potential energy: ' + str(energy_f))
 
 #print('Starting global optimization...')
 
-hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=FIRE, 
-minima_threshold=4.0e-3, fmax=3e-02, fmax2=0.1, initial_fmax=5e-02, 
-mdmin=600, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., 
-pfactor=0.06*75.**2, k1=10., rt1=0.01, k2=20., rt2=1.5, constrain_bool = True)
+hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=BFGS, 
+minima_threshold=5.0e-3, fmax=3e-02, fmax2=0.1, initial_fmax=5e-02, 
+mdmin=900, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., 
+pfactor=0.06*75.**2, k1=3., rt1=0.01, k2=10., rt2=0.0, constrain_bool = True)
 
 hop(totalsteps=100)
 
