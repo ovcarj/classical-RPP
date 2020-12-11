@@ -15,11 +15,11 @@ def CalculateOnTeran(molecule_prefix, molecule_start, molecule_end):
     n_mol = len(MOL)
     write_xyz(fileobj='gaussian_in.com', images=MOL)
     
-    bash('./gaussian.sh')
+    bash('./gaussian_dj.sh')
     
     print('Calculating ' + molecule_prefix + ' on Isabella...')
     
-    bash('./teran.sh ' + molecule_prefix + ' ' + str(n_mol))
+    bash('./teran_dj.sh ' + molecule_prefix + ' ' + str(n_mol))
     
     print('Isabella calculation done.')
     
@@ -69,23 +69,23 @@ database = UpdateDatabase()
 
 #enter prefixes
 
-prefix = 'BA'        #large organic molecule
+prefix = '3AMP'        #large organic molecule
 small_prefix = 'MA'  #small organic molecule
 
 # Chemical unit info
 
 N = 1          #number of inorganic layers
 
-N_A = 2        #number of large organic spacers (BA, PEA, ...)
+N_A = 1        #number of large organic spacers (BA, PEA, ...)
 N_B = N-1      #number of smaller organic spacers (MA, FA)
 N_Pb = N       #number of lead atoms
 N_Br = 3*N+1   #number of bromide atoms
 
-# Large organic molecule info (BA)
+# Large organic molecule info (3AMP)
 
-N_C = 4
-N_H = 12
-N_N = 1
+N_C = 6
+N_H = 16
+N_N = 2
 N_MOL = N_C + N_H + N_N
 
 # Smaller organic molecule info (MA)
@@ -124,7 +124,7 @@ Br_indices = np.flatnonzero(symbols == 'Br')
 inorganic_indices = np.concatenate((Pb_indices, Br_indices))
 N_inorganic = len(inorganic_indices)
 
-print('Found', Pb_number, 'Pb. The .xyz should contain', N_chem*2, 'large organic spacers followed by',
+print('Found', Pb_number, 'Pb. The .xyz should contain', N_chem*N_A, 'large organic spacers followed by',
 N_chem*N_B, 'smaller organic spacers.')
 
 #Check if the large molecule is already in the database
@@ -147,7 +147,7 @@ if(N > 1):
     
     else:
         print('Could not find ' + small_prefix + ' in database. Attempting Gaussian/Amber calculation...')
-        CalculateOnTeran(small_prefix, N_MOL*2*N_chem, N_MOL*2*N_chem+N_mol)
+        CalculateOnTeran(small_prefix, N_MOL*N_A*N_chem, N_MOL*N_A*N_chem+N_mol)
 
 # Get molecular topology and charges info for big molecule
 
