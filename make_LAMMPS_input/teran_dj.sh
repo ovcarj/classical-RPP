@@ -21,7 +21,7 @@ ssh jovcar@teran.srce.hr <<EOF
 	cp /shared/jovcar/gaussian/gaussian_submit_chg.sh .
 	N2=$(($2+2))
 	cat ../opt/gaussian_in.log | tac | grep "Coordinates" -B\${N2} -m1 | tac | tail -${2} | awk '{print \$4, \$5, \$6}' > tmp_coords.dat
-	grep "+2 2" ../opt/gaussian_in.com -A${2} | tail -${2} | awk '{print \$1}' > tmp_type.dat
+	grep "+2 1" ../opt/gaussian_in.com -A${2} | tail -${2} | awk '{print \$1}' > tmp_type.dat
 	pr -mts' ' tmp_type.dat tmp_coords.dat > tmp_atoms.dat
 	sed -i "8r tmp_atoms.dat" ginp-chg.com
 	qsub -sync y gaussian_submit_chg.sh
