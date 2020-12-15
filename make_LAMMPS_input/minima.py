@@ -112,7 +112,7 @@ print('Final potential energy: ' + str(energy_f))
 hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=BFGS, 
 minima_threshold=5.0e-3, fmax=3e-02, fmax2=0.1, initial_fmax=5e-02, 
 mdmin=900, beta1=1.1, beta2=1.1, beta3=1./1.8, externalstress=0., ttime=25., 
-pfactor=0.06*75.**2, k1=3., rt1=0.01, k2=10., rt2=0.0, constrain_bool = True)
+pfactor=0.06*75.**2, k1=3., rt1=0.01, k2=10., rt2=0.0, constrain_bool = False)
 
 hop(totalsteps=100)
 

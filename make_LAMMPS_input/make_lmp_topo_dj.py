@@ -74,7 +74,7 @@ small_prefix = 'MA'  #small organic molecule
 
 # Chemical unit info
 
-N = 1          #number of inorganic layers
+N = 2          #number of inorganic layers
 
 N_A = 1        #number of large organic spacers (BA, PEA, ...)
 N_B = N-1      #number of smaller organic spacers (MA, FA)
@@ -482,7 +482,7 @@ else:
     print('Warning: strings "super" or "unit" not found in the name of .xyz file. Assuming supercell in z-direction. This may lead to wrong molecular indexing in LAMMPS file.')
     average_z = AverageInorganicZ(atoms, inorganic_indices)
 
-bash('./molecule_indices.sh ' + str(int(N_chem * 2)) + ' ' + str(int(N_MOL)) + ' ' + str(int(N_chem * N_B)) + ' ' + str(int(N_mol)) + ' ' + str(int(N_inorganic)) + ' ' + str(average_z) + ' ' + prefix)
+bash('./molecule_indices.sh ' + str(int(N_chem * N_A)) + ' ' + str(int(N_MOL)) + ' ' + str(int(N_chem * N_B)) + ' ' + str(int(N_mol)) + ' ' + str(int(N_inorganic)) + ' ' + str(average_z) + ' ' + prefix)
 
 #print('./molecule_indices.sh ' + str(int(N_chem * 2)) + ' ' + str(int(N_MOL)) + ' ' + str(int(N_chem * N_B)) + ' ' + str(int(N_mol)) + ' ' + str(int(N_inorganic)) + ' ' + str(average_z) + ' ' + prefix)
 
