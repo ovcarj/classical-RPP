@@ -69,12 +69,13 @@ cell_y_factor = 0.0
 # We ask the user which unit cell type he wants. The x and y lengths of the cell are measured in the units of Pb-Br distance
 ### cell_type = 1 === cell length is sqrt(2)
 ### cell_type = 2 === cell length is 2
-### TO BE IMPLEMENTED: cell_type = 3 === cell lenth is 1
+### cell_type = 3 === cell length is 1
 
 print('Enter unit cell type (1 or 2):')
 print('X and Y cell lengths:')
-print('1 = sqrt(2)')
-print('2 = 2')
+print('1 = sqrt(2) x sqrt(2)')
+print('2 = 2x1')
+print('3 = 1x1')
 
 cell_type = str(input())
 
