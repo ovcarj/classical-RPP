@@ -32,8 +32,12 @@ class MinimaHopping:
         'mdmin': 2,  # criteria to stop MD simulation (no. of minima)
         'logfile': 'hop.log',  # text log
         'minima_threshold': 0.5e-3,  # A, cosine distance threshold for identical configs
+        'ofp_rcut': 10.,  # A, cutoff for neighborlists for OFP comparison
+        'ofp_sigma': 0.1, # A, variance of OFP gaussians
+        'ofp_nsigma': 5,  # number of sigmas after OFP gaussians are cut
+        'ofp_binwidth': 0.05, # binwidth for OFP gaussians discretization
         'timestep': 1.0,  # fs, timestep for MD simulations
-        'optimizer': FIRE,  # local optimizer to use
+        'optimizer': BFGS,  # local optimizer to use
         'minima_traj': 'minima.traj',  # storage file for minima list
         'fmax': 0.05,  # eV/A, max force for cell optimization
         'fmax2': 0.1,  # eV/A, max force for geometry optimization
@@ -68,45 +72,46 @@ class MinimaHopping:
 
         #Oganov fingerprints for structure comparison
         self._comp = OFPComparator(dE=10.0,
-                     cos_dist_max=self._minima_threshold, rcut=20., binwidth=0.05,
-                     pbc=[True, True, True], sigma=0.05, nsigma=4,
+                     cos_dist_max=self._minima_threshold, rcut=self._ofp_rcut, binwidth=self._ofp_binwidth,
+                     pbc=[True, True, True], sigma=self._ofp_sigma, nsigma=self._ofp_nsigma,
                      recalculate=False)
 
-        #inorganic indices and positions for Hookean constraints
-        self._Pb_indices = np.where(self._atoms.symbols == 'Pb')[0]
-        self._Pb_positions = self._atoms.positions[self._Pb_indices]
-        self._Br_indices = np.where(self._atoms.symbols == 'Br')[0]
-        self._Br_positions = self._atoms.positions[self._Br_indices]
-        self._inorganic_indices = np.concatenate((self._Pb_indices, self._Br_indices))
-        self._inorganic_positions = self._atoms.positions[self._inorganic_indices]
-        #make list for distances of Pb atoms and 6 surrounding Br
-#        self._distances_list = np.empty((len(self._Pb_indices), 6))
-        self._indices_list = np.empty((len(self._Pb_indices), 6), dtype='int')
+        if self._constrain_bool == True:
+            #inorganic indices and positions for Hookean constraints
+            self._Pb_indices = np.where(self._atoms.symbols == 'Pb')[0]
+            self._Pb_positions = self._atoms.positions[self._Pb_indices]
+            self._Br_indices = np.where(self._atoms.symbols == 'Br')[0]
+            self._Br_positions = self._atoms.positions[self._Br_indices]
+            self._inorganic_indices = np.concatenate((self._Pb_indices, self._Br_indices))
+            self._inorganic_positions = self._atoms.positions[self._inorganic_indices]
+            #make list for distances of Pb atoms and 6 surrounding Br
+#            self._distances_list = np.empty((len(self._Pb_indices), 6))
+            self._indices_list = np.empty((len(self._Pb_indices), 6), dtype='int')
 
-        for i in range(len(self._Pb_indices)):
-            distances = self._atoms.get_distances(self._Pb_indices[i], self._Br_indices, mic=True)
-#            self._distances_list[i] = distances[np.argsort(distances)[:6]]
-            self._indices_list[i] = self._Br_indices[np.argsort(distances)[:6]]
-
-        #find pairs of 2 Br's closest in z-direction and furthest in z-direction
-        average_Br_z = np.average(self._Br_positions[:,2])
-        top_Br = self._Br_indices[np.where(self._Br_positions[:,2] > average_Br_z)]
-        bottom_Br = self._Br_indices[np.where(self._Br_positions[:,2] < average_Br_z)]
-        #Br groups are labelled 1,2,3,4 from bottom to top so 1-4 and 2-3 should be paired
-        Br_group1 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[:4]]
-        Br_group2 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[-4:]]
-        Br_group3 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[:4]]
-        Br_group4 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[-4:]]
-
-        self._Br_index1 = int(Br_group1[0])
-        Br_relative1 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group4]
-        self._Br_index4 = int(Br_group4[np.argmin(np.linalg.norm(Br_relative1[:,:2], axis=1))])
-
-        Br_relative2 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group2]
-        self._Br_index2 = int(Br_group2[np.argmin(np.linalg.norm(Br_relative2[:,:2], axis=1))])
-
-        Br_relative3 = self._atoms.positions[self._Br_index2] - self._atoms.positions[Br_group3]
-        self._Br_index3 = int(Br_group3[np.argmin(np.linalg.norm(Br_relative3[:,:2], axis=1))])
+            for i in range(len(self._Pb_indices)):
+                distances = self._atoms.get_distances(self._Pb_indices[i], self._Br_indices, mic=True)
+#                self._distances_list[i] = distances[np.argsort(distances)[:6]]
+                self._indices_list[i] = self._Br_indices[np.argsort(distances)[:6]]
+        
+            #find pairs of 2 Br's closest in z-direction and furthest in z-direction
+            average_Br_z = np.average(self._Br_positions[:,2])
+            top_Br = self._Br_indices[np.where(self._Br_positions[:,2] > average_Br_z)]
+            bottom_Br = self._Br_indices[np.where(self._Br_positions[:,2] < average_Br_z)]
+            #Br groups are labelled 1,2,3,4 from bottom to top so 1-4 and 2-3 should be paired
+            Br_group1 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[:4]]
+            Br_group2 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[-4:]]
+            Br_group3 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[:4]]
+            Br_group4 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[-4:]]
+            
+            self._Br_index1 = int(Br_group1[0])
+            Br_relative1 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group4]
+            self._Br_index4 = int(Br_group4[np.argmin(np.linalg.norm(Br_relative1[:,:2], axis=1))])
+            
+            Br_relative2 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group2]
+            self._Br_index2 = int(Br_group2[np.argmin(np.linalg.norm(Br_relative2[:,:2], axis=1))])
+            
+            Br_relative3 = self._atoms.positions[self._Br_index2] - self._atoms.positions[Br_group3]
+            self._Br_index3 = int(Br_group3[np.argmin(np.linalg.norm(Br_relative3[:,:2], axis=1))])
 
     def __call__(self, totalsteps=None, maxtemp=None):
         """Run the minima hopping algorithm. Can specify stopping criteria

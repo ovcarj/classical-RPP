@@ -464,9 +464,12 @@ class OFPComparator(object):
         w = {}
         wtot = 0
         for key in keys:
-            weight = len(typedic[key[0]]) * len(typedic[key[1]])
-            wtot += weight
-            w[key] = weight
+            if key[0] == 1:
+                w[key] = 0
+            else:
+                weight = len(typedic[key[0]]) * len(typedic[key[1]])
+                wtot += weight
+                w[key] = weight
         for key in keys:
             w[key] *= 1. / wtot
 
@@ -474,15 +477,21 @@ class OFPComparator(object):
         norm1 = 0
         norm2 = 0
         for key in keys:
-            norm1 += (np.linalg.norm(fp1[key])**2) * w[key]
-            norm2 += (np.linalg.norm(fp2[key])**2) * w[key]
+            if key[0] == 1:
+                pass
+            else:
+                norm1 += (np.linalg.norm(fp1[key])**2) * w[key]
+                norm2 += (np.linalg.norm(fp2[key])**2) * w[key]
         norm1 = np.sqrt(norm1)
         norm2 = np.sqrt(norm2)
 
         # calculating the distance:
         distance = 0
         for key in keys:
-            distance += np.sum(fp1[key] * fp2[key]) * w[key] / (norm1 * norm2)
+            if key[0] == 1:
+                pass
+            else:
+                distance += np.sum(fp1[key] * fp2[key]) * w[key] / (norm1 * norm2)
 
         distance = 0.5 * (1 - distance)
         return distance
