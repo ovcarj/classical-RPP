@@ -253,7 +253,7 @@ class MinimaHopping:
         if (self._previous_energy is None or
             (self._atoms.get_potential_energy() <
                 self._previous_energy + self._Ediff)):
-            unique = self._is_unique()
+            unique, cosine_distances = self._is_unique()
             del self._atoms.info['fingerprints']
             if unique:
                         self._log('msg', 'Accepted new minimum.')
@@ -265,13 +265,12 @@ class MinimaHopping:
             if not unique:
                         self._log('msg', 'Rejected minimum because a similar fingerprint was found.')
 
-                        similar_index = self._get_most_similar()
+                        similar_index = np.argmin(cosine_distances)
 
-                        if self._atoms.get_potential_energy() < self._minima_energies[similar_index]:
+                        if similar_index == len(self._minima) - 1 and self._atoms.get_potential_energy() < self._minima_energies[similar_index] and cosine_distances[-2] > self._minima_threshold:
                                     self._replace_minimum(similar_index)
-                                    if similar_index == len(self._minima) - 1:
-                                                self._previous_optimum = self._atoms.copy()
-                                                self._previous_energy = self._atoms.get_potential_energy()
+                                    self._previous_optimum = self._atoms.copy()
+                                    self._previous_energy = self._atoms.get_potential_energy()
 
                         self._atoms.positions = self._previous_optimum.positions
                         self._atoms.cell = self._previous_optimum.cell
@@ -288,14 +287,15 @@ class MinimaHopping:
             self._log('par')
 
     def _is_unique(self):
-            if True in [self._comp.looks_like(self._atoms, min) for min in self._minima]:
-                        return False
-            else:
-                        return True
+            cosine_distances = [self._comp._compare_structure(self._atoms, min) for min in self._minima]
+            cosine_distances_string = ' '.join([str(elem) for elem in [round(elemo, 8) for elemo in cosine_distances]])
 
-    def _get_most_similar(self):
-            index = np.argmin([self._comp._compare_structure(self._atoms, min) for min in self._minima])
-            return index
+            self._log('msg', 'Cosine distances for candidate #%i = %s' % (self._counter - 1, cosine_distances_string))
+
+            if True in [self._comp.looks_like(self._atoms, min) for min in self._minima]:
+                        return False, cosine_distances
+            else:
+                        return True, cosine_distances
 
     def _log(self, cat='msg', message=None):
         """Records the message as a line in the log file."""

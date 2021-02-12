@@ -1,12 +1,17 @@
 import os
 import numpy as np
+from ase.io import read, write
 from ase import io, units
-from ase.optimize import QuasiNewton
+from ase.optimize import QuasiNewton, FIRE, BFGS
+from ase.md.npt import NPT
 from ase.parallel import paropen, world
 from ase.md import VelocityVerlet
 from ase.md import MDLogger
 from ase.md.velocitydistribution import MaxwellBoltzmannDistribution
-
+from ase.ga.ofp_comparator import OFPComparator
+from ase.calculators.lammpslib import is_upper_triangular, convert_cell_4NPT
+from ase.constraints import Hookean, FixAtoms
+from ase.constraints import ExpCellFilter
 
 class MinimaHopping:
     """Implements the minima hopping method of global optimization outlined
@@ -26,11 +31,25 @@ class MinimaHopping:
         'alpha2': 1. / 0.98,  # energy threshold adjustment parameter
         'mdmin': 2,  # criteria to stop MD simulation (no. of minima)
         'logfile': 'hop.log',  # text log
-        'minima_threshold': 0.5,  # A, threshold for identical configs
+        'minima_threshold': 0.5e-3,  # A, cosine distance threshold for identical configs
+        'ofp_rcut': 10.,  # A, cutoff for neighborlists for OFP comparison
+        'ofp_sigma': 0.1, # A, variance of OFP gaussians
+        'ofp_nsigma': 5,  # number of sigmas after OFP gaussians are cut
+        'ofp_binwidth': 0.05, # binwidth for OFP gaussians discretization
         'timestep': 1.0,  # fs, timestep for MD simulations
-        'optimizer': QuasiNewton,  # local optimizer to use
+        'optimizer': BFGS,  # local optimizer to use
         'minima_traj': 'minima.traj',  # storage file for minima list
-        'fmax': 0.05}  # eV/A, max force for optimizations
+        'fmax': 0.05,  # eV/A, max force for cell optimization
+        'fmax2': 0.1,  # eV/A, max force for geometry optimization
+        'initial_fmax': 0.05, # ev/A, max force for initial cell optimization
+        'externalstress': 1e-1, # ev/A^3, the external stress tensor or scalar representing pressure.
+        'ttime': 25.,  # fs, time constant for temperature coupling
+        'pfactor': 0.6 * 75.**2, # constant in the barostat differential equation
+        'k1': 15., # eV/A**2, spring constant for Hookean constraint between nearest neighbouring inorganic atoms
+        'rt1': 0.01, # A, activate Hookean constraint if the bond between inorganic atoms lengthens for this amount
+        'k2': 15., # eV/A**2, spring constant for Hookean constraint between pairs of Br atoms from different layers
+        'rt2': 1.5, # A, activate Hookean constraint if the distance between pairs of Br atoms increases by this amount
+        'constrain_bool': False} # should constraints be activated
 
     def __init__(self, atoms, **kwargs):
         """Initialize with an ASE atoms object and keyword arguments."""
@@ -45,10 +64,54 @@ class MinimaHopping:
         self._passedminimum = PassedMinimum()
 
         # Misc storage.
+        self._minima_energies = []
         self._previous_optimum = None
         self._previous_energy = None
         self._temperature = self._T0
         self._Ediff = self._Ediff0
+
+        #Oganov fingerprints for structure comparison
+        self._comp = OFPComparator(dE=10.0,
+                     cos_dist_max=self._minima_threshold, rcut=self._ofp_rcut, binwidth=self._ofp_binwidth,
+                     pbc=[True, True, True], sigma=self._ofp_sigma, nsigma=self._ofp_nsigma,
+                     recalculate=False)
+
+        if self._constrain_bool == True:
+            #inorganic indices and positions for Hookean constraints
+            self._Pb_indices = np.where(self._atoms.symbols == 'Pb')[0]
+            self._Pb_positions = self._atoms.positions[self._Pb_indices]
+            self._Br_indices = np.where(self._atoms.symbols == 'Br')[0]
+            self._Br_positions = self._atoms.positions[self._Br_indices]
+            self._inorganic_indices = np.concatenate((self._Pb_indices, self._Br_indices))
+            self._inorganic_positions = self._atoms.positions[self._inorganic_indices]
+            #make list for distances of Pb atoms and 6 surrounding Br
+#            self._distances_list = np.empty((len(self._Pb_indices), 6))
+            self._indices_list = np.empty((len(self._Pb_indices), 6), dtype='int')
+
+            for i in range(len(self._Pb_indices)):
+                distances = self._atoms.get_distances(self._Pb_indices[i], self._Br_indices, mic=True)
+#                self._distances_list[i] = distances[np.argsort(distances)[:6]]
+                self._indices_list[i] = self._Br_indices[np.argsort(distances)[:6]]
+        
+            #find pairs of 2 Br's closest in z-direction and furthest in z-direction
+            average_Br_z = np.average(self._Br_positions[:,2])
+            top_Br = self._Br_indices[np.where(self._Br_positions[:,2] > average_Br_z)]
+            bottom_Br = self._Br_indices[np.where(self._Br_positions[:,2] < average_Br_z)]
+            #Br groups are labelled 1,2,3,4 from bottom to top so 1-4 and 2-3 should be paired
+            Br_group1 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[:4]]
+            Br_group2 = bottom_Br[np.argsort(self._atoms.positions[bottom_Br][:,2])[-4:]]
+            Br_group3 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[:4]]
+            Br_group4 = top_Br[np.argsort(self._atoms.positions[top_Br][:,2])[-4:]]
+            
+            self._Br_index1 = int(Br_group1[0])
+            Br_relative1 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group4]
+            self._Br_index4 = int(Br_group4[np.argmin(np.linalg.norm(Br_relative1[:,:2], axis=1))])
+            
+            Br_relative2 = self._atoms.positions[self._Br_index1] - self._atoms.positions[Br_group2]
+            self._Br_index2 = int(Br_group2[np.argmin(np.linalg.norm(Br_relative2[:,:2], axis=1))])
+            
+            Br_relative3 = self._atoms.positions[self._Br_index2] - self._atoms.positions[Br_group3]
+            self._Br_index3 = int(Br_group3[np.argmin(np.linalg.norm(Br_relative3[:,:2], axis=1))])
 
     def __call__(self, totalsteps=None, maxtemp=None):
         """Run the minima hopping algorithm. Can specify stopping criteria
@@ -70,8 +133,10 @@ class MinimaHopping:
 
             self._previous_optimum = self._atoms.copy()
             self._previous_energy = self._atoms.get_potential_energy()
+            if self._constrain_bool == True:
+                self._constrain() #added by me
             self._molecular_dynamics()
-            self._optimize()
+            self._optimize(self._fmax)
             self._counter += 1
             self._check_results()
 
@@ -104,7 +169,9 @@ class MinimaHopping:
                 self._log('msg', 'Using existing minima file with %i prior '
                           'minima: %s' % (len(self._minima),
                                           self._minima_traj))
-            self._optimize()
+            if self._constrain_bool == True:
+                self._constrain() #added by me
+            self._optimize(self._initial_fmax)
             self._check_results()
             self._counter += 1
 
@@ -177,48 +244,58 @@ class MinimaHopping:
         if len(self._minima) == 0:
             self._log('msg', 'Found a new minimum.')
             self._log('msg', 'Accepted new minimum.')
-            self._record_minimum()
+            self._record_first_minimum()
             self._log('par')
             return
-        # Returned to starting position?
-        if self._previous_optimum:
-            compare = ComparePositions(translate=False)
-            dmax = compare(self._atoms, self._previous_optimum)
-            self._log('msg', 'Max distance to last minimum: %.3f A' % dmax)
-            if dmax < self._minima_threshold:
-                self._log('msg', 'Re-found last minimum.')
-                self._temperature *= self._beta1
-                self._log('par')
-                return
-        # In a previously found position?
-        unique, dmax_closest = self._unique_minimum_position()
-        self._log('msg', 'Max distance to closest minimum: %.3f A' %
-                  dmax_closest)
-        if not unique:
-            self._temperature *= self._beta2
-            self._log('msg', 'Found previously found minimum.')
-            self._log('par')
-            if self._previous_optimum:
-                self._log('msg', 'Restoring last minimum.')
-                self._atoms.positions = self._previous_optimum.positions
-            return
-        # Must have found a unique minimum.
-        self._temperature *= self._beta3
-        self._log('msg', 'Found a new minimum.')
-        self._log('par')
+
+        # Energy and Oganov fingerprint minimum test
+
         if (self._previous_energy is None or
             (self._atoms.get_potential_energy() <
                 self._previous_energy + self._Ediff)):
-            self._log('msg', 'Accepted new minimum.')
-            self._Ediff *= self._alpha1
-            self._log('par')
-            self._record_minimum()
+            unique = self._is_unique()
+            del self._atoms.info['fingerprints']
+            if unique:
+                        self._log('msg', 'Accepted new minimum.')
+                        self._Ediff *= self._alpha1
+                        self._temperature = self._T0
+                        self._previous_optimum = self._atoms.copy()
+                        self._log('par')
+                        self._record_minimum()
+            if not unique:
+                        self._log('msg', 'Rejected minimum because a similar fingerprint was found.')
+
+                        similar_index = self._get_most_similar()
+
+                        if self._atoms.get_potential_energy() < self._minima_energies[similar_index]:
+                                    self._replace_minimum(similar_index)
+                                    if similar_index == len(self._minima) - 1:
+                                                self._previous_optimum = self._atoms.copy()
+                                                self._previous_energy = self._atoms.get_potential_energy()
+
+                        self._atoms.positions = self._previous_optimum.positions
+                        self._atoms.cell = self._previous_optimum.cell
+                        self._Ediff *= self._alpha2
+                        self._temperature *= self._beta1
+                        self._log('par')
         else:
             self._log('msg', 'Rejected new minimum due to energy. '
                              'Restoring last minimum.')
             self._atoms.positions = self._previous_optimum.positions
+            self._atoms.cell = self._previous_optimum.cell
             self._Ediff *= self._alpha2
+            self._temperature *= self._beta1
             self._log('par')
+
+    def _is_unique(self):
+            if True in [self._comp.looks_like(self._atoms, min) for min in self._minima]:
+                        return False
+            else:
+                        return True
+
+    def _get_most_similar(self):
+            index = np.argmin([self._comp._compare_structure(self._atoms, min) for min in self._minima])
+            return index
 
     def _log(self, cat='msg', message=None):
         """Records the message as a line in the log file."""
@@ -250,37 +327,49 @@ class MinimaHopping:
         f.write(line + '\n')
         f.close()
 
-    def _optimize(self):
+    def _optimize(self, cell_opt_fmax):
         """Perform an optimization."""
+        if self._constrain_bool == True:
+            del self._atoms.constraints[-2:]
         self._atoms.set_momenta(np.zeros(self._atoms.get_momenta().shape))
-        opt = self._optimizer(self._atoms,
+        geo_opt = FIRE(self._atoms)
+        geo_opt.run(fmax=self._fmax2)
+        ecf = ExpCellFilter(self._atoms)
+        opt = self._optimizer(ecf,
                               trajectory='qn%05i.traj' % self._counter,
                               logfile='qn%05i.log' % self._counter)
         self._log('msg', 'Optimization: qn%05i' % self._counter)
-        opt.run(fmax=self._fmax)
+        opt.run(fmax=cell_opt_fmax)
         self._log('ene')
+        if self._constrain_bool == True:
+            del self._atoms.constraints
+        tri_mat, coord_transform = convert_cell_4NPT(self._atoms.get_cell())
+        self._atoms.set_positions([np.matmul(coord_transform, position) for position in self._atoms.get_positions()])
+        self._atoms.set_cell(tri_mat.transpose())
+        self._atoms.get_potential_energy()
 
-    def _record_minimum(self):
-        """Adds the current atoms configuration to the minima list."""
-        traj = io.Trajectory(self._minima_traj, 'a')
-        traj.write(self._atoms)
-        self._read_minima()
-        self._log('msg', 'Recorded minima #%i.' % (len(self._minima) - 1))
+    def _constrain(self):
+        """Puts Hookean constraint on Pb atoms."""
+#        self._Pb_positions = self._atoms.positions[self._Pb_indices]
+#        self._Br_positions = self._atoms.positions[self._Br_indices]
+        constraints_inorganic_Hookean = [Hookean(a1=int(self._Pb_indices[i]), a2=int(j), rt=self._atoms.get_distances(int(self._Pb_indices[i]), int(j), mic=True) + self._rt1, k=self._k1) for i in range(len(self._Pb_indices)) for j in self._indices_list[i]]
+        constraint_Br1 = [Hookean(a1=self._Br_index1, a2=self._Br_index4, rt=self._atoms.get_distances(self._Br_index1, self._Br_index4, mic=True) + self._rt2, k=self._k2)]
+        constraint_Br2 = [Hookean(a1=self._Br_index2, a2=self._Br_index3, rt=self._atoms.get_distances(self._Br_index2, self._Br_index3, mic=True) + self._rt2, k=self._k2)]
 
-    def _read_minima(self):
-        """Reads in the list of minima from the minima file."""
-        exists = os.path.exists(self._minima_traj)
-        if exists:
-            empty = os.path.getsize(self._minima_traj) == 0
-            if not empty:
-                traj = io.Trajectory(self._minima_traj, 'r')
-                self._minima = [atoms for atoms in traj]
-            else:
-                self._minima = []
-            return True
-        else:
-            self._minima = []
-            return False
+#        Pb_z = self._Pb_positions[:,2]
+#        Pb_average_z = np.average(Pb_z)
+#        Pb_upper_indices = self._Pb_indices[np.where(Pb_z > Pb_average_z)]
+#        Pb_bottom_indices = self._Pb_indices[np.where(Pb_z < Pb_average_z)]
+#        constraint_fix = [FixAtoms(indices=[Pb_upper_indices[0]])]
+#        constraint_upper_to_fix = [Hookean(a1=Pb_upper_indices[0], a2=int(i), rt=self._atoms.get_distance(Pb_upper_indices[0], i, mic=True) + 0.1, k=5.) for i in Pb_upper_indices[1:]]
+#        constraint_upper = [Hookean(a1=int(i), a2=int(j), rt=self._atoms.get_distance(i, j, mic=True) + 0.1, k=5.) for i in Pb_upper_indices[1:] for j in Pb_upper_indices[1:] if i < j]
+#        constraint_bottom = [Hookean(a1=int(i), a2=int(j), rt=self._atoms.get_distance(i, j, mic=True) + 0.1, k=5.) for i in Pb_bottom_indices for j in Pb_bottom_indices if i < j]
+        constraints_non_flat = [constrain for constrain in [constraints_inorganic_Hookean, constraint_Br1, constraint_Br2] if constrain != []]
+        constraints = [item for sublist in constraints_non_flat for item in sublist]
+#        constraints = [Hookean(a1=self._Pb_indices[i], a2=self._Pb_positions[i], rt=0.01, k=15.) for i in range(len(self._Pb_indices))]
+#        self._atoms.set_constraint(constraints)
+        self._atoms.set_constraint(constraints)
+#        print(atoms.constraints)
 
     def _molecular_dynamics(self, resume=None):
         """Performs a molecular dynamics simulation, until mdmin is
@@ -314,11 +403,15 @@ class MinimaHopping:
                                          force_temp=True)
         traj = io.Trajectory('md%05i.traj' % self._counter, 'a',
                              self._atoms)
-        dyn = VelocityVerlet(self._atoms, timestep=self._timestep * units.fs)
+#        if self._constrain_bool == True:
+#            self._constrain()
+
+        dyn = NPT(self._atoms, timestep=self._timestep * units.fs, temperature=self._temperature * units.kB, externalstress=self._externalstress, ttime=self._ttime*units.fs, pfactor=self._pfactor*units.fs**2)
+#        dyn = NPTber(self._atoms, timestep=self._timestep * units.fs, temperature=self._temperature, fixcm=True, pressure=self._pressure, taut=self._taut * units.fs, taup=self._taup * units.fs, compressibility=self._compressibility)
         log = MDLogger(dyn, self._atoms, 'md%05i.log' % self._counter,
                        header=True, stress=False, peratom=False)
         dyn.attach(log, interval=1)
-        dyn.attach(traj, interval=1)
+        dyn.attach(traj, interval=100)
         while mincount < self._mdmin:
             dyn.run(1)
             energies.append(self._atoms.get_potential_energy())
@@ -329,115 +422,44 @@ class MinimaHopping:
         # Reset atoms to minimum point.
         self._atoms.positions = oldpositions[passedmin[0]]
 
-    def _unique_minimum_position(self):
-        """Identifies if the current position of the atoms, which should be
-        a local minima, has been found before."""
-        unique = True
-        dmax_closest = 99999.
-        compare = ComparePositions(translate=True)
+    def _record_first_minimum(self):
+        """Temporary kludge to write first minimum because otherwise it doesn't write its energy..."""
+        write(self._minima_traj, self._atoms)
+        self._minima_energies.append(self._atoms.get_potential_energy())
         self._read_minima()
-        for minimum in self._minima:
-            dmax = compare(minimum, self._atoms)
-            if dmax < self._minima_threshold:
-                unique = False
-            if dmax < dmax_closest:
-                dmax_closest = dmax
-        return unique, dmax_closest
+        self._log('msg', 'Recorded minima #%i.' % (len(self._minima) - 1))
 
+    def _record_minimum(self):
+        """Adds the current atoms configuration to the minima list."""
+        traj = io.Trajectory(self._minima_traj, 'a')
+        traj.write(self._atoms)
+        self._minima_energies.append(self._atoms.get_potential_energy())
+        self._read_minima()
+        self._log('msg', 'Recorded minima #%i.' % (len(self._minima) - 1))
 
-class ComparePositions:
-    """Class that compares the atomic positions between two ASE atoms
-    objects. Returns the maximum distance that any atom has moved, assuming
-    all atoms of the same element are indistinguishable. If translate is
-    set to True, allows for arbitrary translations within the unit cell,
-    as well as translations across any periodic boundary conditions. When
-    called, returns the maximum displacement of any one atom."""
-
-    def __init__(self, translate=True):
-        self._translate = translate
-
-    def __call__(self, atoms1, atoms2):
-        atoms1 = atoms1.copy()
-        atoms2 = atoms2.copy()
-        if not self._translate:
-            dmax = self. _indistinguishable_compare(atoms1, atoms2)
-        else:
-            dmax = self._translated_compare(atoms1, atoms2)
-        return dmax
-
-    def _translated_compare(self, atoms1, atoms2):
-        """Moves the atoms around and tries to pair up atoms, assuming any
-        atoms with the same symbol are indistinguishable, and honors
-        periodic boundary conditions (for example, so that an atom at
-        (0.1, 0., 0.) correctly is found to be close to an atom at
-        (7.9, 0., 0.) if the atoms are in an orthorhombic cell with
-        x-dimension of 8. Returns dmax, the maximum distance between any
-        two atoms in the optimal configuration."""
-        atoms1.set_constraint()
-        atoms2.set_constraint()
-        for index in range(3):
-            assert atoms1.pbc[index] == atoms2.pbc[index]
-        least = self._get_least_common(atoms1)
-        indices1 = [atom.index for atom in atoms1 if atom.symbol == least[0]]
-        indices2 = [atom.index for atom in atoms2 if atom.symbol == least[0]]
-        # Make comparison sets from atoms2, which contain repeated atoms in
-        # all pbc's and bring the atom listed in indices2 to (0,0,0)
-        comparisons = []
-        repeat = []
-        for bc in atoms2.pbc:
-            if bc:
-                repeat.append(3)
+    def _read_minima(self):
+        """Reads in the list of minima from the minima file."""
+        exists = os.path.exists(self._minima_traj)
+        if exists:
+            empty = os.path.getsize(self._minima_traj) == 0
+            if not empty:
+                traj = io.Trajectory(self._minima_traj, 'r')
+                self._minima = [atoms for atoms in traj]
             else:
-                repeat.append(1)
-        repeated = atoms2.repeat(repeat)
-        moved_cell = atoms2.cell * atoms2.pbc
-        for moved in moved_cell:
-            repeated.translate(-moved)
-        repeated.set_cell(atoms2.cell)
-        for index in indices2:
-            comparison = repeated.copy()
-            comparison.translate(-atoms2[index].position)
-            comparisons.append(comparison)
-        # Bring the atom listed in indices1 to (0,0,0) [not whole list]
-        standard = atoms1.copy()
-        standard.translate(-atoms1[indices1[0]].position)
-        # Compare the standard to the comparison sets.
-        dmaxes = []
-        for comparison in comparisons:
-            dmax = self._indistinguishable_compare(standard, comparison)
-            dmaxes.append(dmax)
-        return min(dmaxes)
+                self._minima = []
+            return True
+        else:
+            self._minima = []
+            return False
 
-    def _get_least_common(self, atoms):
-        """Returns the least common element in atoms. If more than one,
-        returns the first encountered."""
-        symbols = [atom.symbol for atom in atoms]
-        least = ['', np.inf]
-        for element in set(symbols):
-            count = symbols.count(element)
-            if count < least[1]:
-                least = [element, count]
-        return least
-
-    def _indistinguishable_compare(self, atoms1, atoms2):
-        """Finds each atom in atoms1's nearest neighbor with the same
-        chemical symbol in atoms2. Return dmax, the farthest distance an
-        individual atom differs by."""
-        atoms2 = atoms2.copy()  # allow deletion
-        atoms2.set_constraint()
-        dmax = 0.
-        for atom1 in atoms1:
-            closest = [np.nan, np.inf]
-            for index, atom2 in enumerate(atoms2):
-                if atom2.symbol == atom1.symbol:
-                    d = np.linalg.norm(atom1.position - atom2.position)
-                    if d < closest[1]:
-                        closest = [index, d]
-            if closest[1] > dmax:
-                dmax = closest[1]
-            del atoms2[closest[0]]
-        return dmax
-
+    def _replace_minimum(self, similar_index):
+        """Replaces minimum that looks similar and has lower energy with current candidate."""
+        minima_trajectory = read(self._minima_traj, index=':')
+        minima_trajectory[similar_index] = self._atoms #.copy()
+        self._minima_energies[similar_index] = self._atoms.get_potential_energy()
+        write(self._minima_traj, minima_trajectory)
+        self._read_minima()
+        self._log('msg', 'Replaced minima #%i.' % similar_index)
 
 class PassedMinimum:
     """Simple routine to find if a minimum in the potential energy surface

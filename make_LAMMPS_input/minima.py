@@ -109,7 +109,7 @@ print('Final potential energy: ' + str(energy_f))
 
 #print('Starting global optimization...')
 
-#minimum cell length for OFP cutoff, take away 1A to minimize the chaance of capturing periodic images 
+#minimum cell length for OFP cutoff, take away 1A to minimize the chance of capturing periodic images 
 minimum_cell_length = np.min(atoms.get_cell_lengths_and_angles()[:3]) - 1.0
 
 hop = MinimaHopping(atoms, timestep=0.5, Ediff0=1.0, T0=50., optimizer=BFGS, 
