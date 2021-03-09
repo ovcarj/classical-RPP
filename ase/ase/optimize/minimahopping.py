@@ -136,6 +136,7 @@ class MinimaHopping:
             if self._constrain_bool == True:
                 self._constrain() #added by me
             self._molecular_dynamics()
+            self._check_skew()
             self._optimize(self._fmax)
             self._counter += 1
             self._check_results()
@@ -343,6 +344,7 @@ class MinimaHopping:
                               logfile='qn%05i.log' % self._counter)
         self._log('msg', 'Optimization: qn%05i' % self._counter)
         opt.run(fmax=cell_opt_fmax)
+        self._check_skew()
         self._log('ene')
         if self._constrain_bool == True:
             del self._atoms.constraints
@@ -424,6 +426,28 @@ class MinimaHopping:
             oldpositions.append(self._atoms.positions.copy())
         # Reset atoms to minimum point.
         self._atoms.positions = oldpositions[passedmin[0]]
+
+    def _check_skew(self):
+        cell = np.copy(self._atoms.cell.standard_form()[0][:])
+        if(np.abs(cell[2][1]) > 0.5 * cell[1][1] or np.abs(cell[2][0]) > 0.5 * cell[0][0] or np.abs(cell[1][0]) > 0.5 * cell[0][0]):
+            self._log('msg', 'Cell skewed, unskewing.')
+            self._unskew()
+
+    def _unskew(self):
+        self._atoms.set_cell(self._atoms.cell.standard_form()[0], scale_atoms=True)
+        cell = self._atoms.cell[:]
+        for i in range(2, 0, -1):
+            for j in range(1, -1, -1):
+                if (i > j):
+                    while cell[i][j] > 0.5 * cell[j][j]:
+                        cell[i] -= cell[j]
+                    while cell[i][j] < -0.5 * cell[j][j]:
+                        cell[i] += cell[j]
+        self._atoms.set_cell(cell)
+        self._atoms.wrap()
+        tri_mat, coord_transform = convert_cell_4NPT(self._atoms.get_cell())
+        self._atoms.set_positions([np.matmul(coord_transform, position) for position in self._atoms.get_positions()])
+        self._atoms.set_cell(tri_mat.transpose())
 
     def _record_first_minimum(self):
         """Temporary kludge to write first minimum because otherwise it doesn't write its energy..."""
