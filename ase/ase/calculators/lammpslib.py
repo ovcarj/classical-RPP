@@ -100,7 +100,7 @@ def convert_cell_4NPT(ase_cell):
 
         return tri_mat, coord_transform
     else:
-        return cell, None
+        return cell, np.identity(3)
 
 class LAMMPSlib(Calculator):
     r"""
