@@ -268,13 +268,13 @@ class MinimaHopping:
 
                         similar_index = np.argmin(cosine_distances)
 
-                        if similar_index == len(self._minima) - 1 and self._atoms.get_potential_energy() < self._minima_energies[similar_index] and cosine_distances[-2] > self._minima_threshold and similar_index != 0:
+                        if similar_index == 0:
+                                    self._log('msg', 'Hop step returned to original structure. Resuming...')
+
+                        elif similar_index == len(self._minima) - 1 and self._atoms.get_potential_energy() < self._minima_energies[similar_index] and cosine_distances[-2] > self._minima_threshold and similar_index != 0:
                                     self._replace_minimum(similar_index)
                                     self._previous_optimum = self._atoms.copy()
                                     self._previous_energy = self._atoms.get_potential_energy()
-
-                        if similar_index == 0:
-                                    self._log('msg', 'Hop step returned to original structure. Resuming...')
 
                         self._atoms.positions = self._previous_optimum.positions
                         self._atoms.cell = self._previous_optimum.cell
