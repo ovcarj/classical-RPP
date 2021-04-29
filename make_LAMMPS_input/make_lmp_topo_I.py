@@ -253,7 +253,7 @@ if(N > 1):
 #note: Pb is type len(Masses)+len(masses)+1, I is type len(Masses)+len(masses)+2,
 
 file.write(str(len(Masses) + len(small_Masses) + 1) + ' ' + '207.2\n')
-file.write(str(len(Masses) + len(small_Masses) + 2) + ' ' + '79.904\n')
+file.write(str(len(Masses) + len(small_Masses) + 2) + ' ' + '126.90\n\n')
 
 #Bond Coeffs
 
