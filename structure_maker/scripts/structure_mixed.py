@@ -135,10 +135,22 @@ if (len(delta_z_factor) == 0):
 
 delta_z_factor = float(delta_z_factor)
 
+# We ask the user if he wants 50-50 iodide-bromide structure.
+
+print('Do you want a mixed 50-50 I/Br structure? (enter y/n)')
+
+iod = str(input())
+
+if (iod == 'y'):
+    iodide = '_mix'
+
+if (iod == 'n'):
+    iodide = ''
+
 # Depending on the chosen options,
 # template structure is read from the INORGANIC_FRAME_DIR directory
 
-frame = read(os.environ["INORGANIC_FRAME_DIR"] + cell_type + 'n' + str(n) + '_' + reof + '_' + super + '.traj')
+frame = read(os.environ["INORGANIC_FRAME_DIR"] + cell_type + 'n' + str(n) + '_' + reof + '_' + super + iodide + '.traj')
 
 # The long organic molecule is read from the script argument (e.g. PEA.traj, BZA.traj, ...)
 
@@ -153,10 +165,11 @@ Br_indices = np.flatnonzero(symbols == 'Br')
 N_indices = np.flatnonzero(symbols == 'N')
 C_indices = np.flatnonzero(symbols == 'C')
 H_indices = np.flatnonzero(symbols == 'H')
+I_indices = np.flatnonzero(symbols == 'I')
 
 organic_indices = np.concatenate((N_indices, C_indices, H_indices))
 
-inorganic_indices = np.concatenate((Pb_indices, Br_indices))
+inorganic_indices = np.concatenate((Pb_indices, Br_indices, I_indices))
 
 # We create seperate structures containing only organic and inorganic atoms
 
@@ -312,17 +325,12 @@ for i in range(len(N_com)):
     if (N_com[i][2]) > 0:
         a = np.array([0.0, 0.0, 1.0])
     else:
-	a = np.array([0.0, 0.0, -1.0])
+        a = np.array([0.0, 0.0, -1.0])
 
     R = get_rotation_matrix(N_mol_com, a)
-
+    
     for j in range(len(mol)):
         new_mol_positions[i][j] = np.matmul(R, mol.get_positions()[j])
-
-# old code, won't erase for now
-#     R = get_rotation_matrix(N_mol_com, N_com[i])
-#     for j in range(len(mol)):
-#        new_mol_positions[i][j] = np.matmul(R, mol.get_positions()[j])
 
 ##### Writing of the final structure. For later construction of the potential, it is !!!VERY!!! important that
 ##### the atoms are written in the following order:
@@ -348,7 +356,7 @@ if (cell_type == '2'):
 
 for i in range(len(N_pos)):
     # Now we move the rest of N atoms (all but the lowest ones are moved here).
-    if(N_pos[i][2] > average_z):
+    if(N_pos[i][2] >= average_z):
         if (sup == 'y'):
             N_pos[i][2] += delta_z
     #### In the following lines, we write the input molecules to their new positions.
@@ -359,7 +367,7 @@ for i in range(len(N_pos)):
     # The long molecule is added to the final structure.
     ordered += mol
     # The position of molecule is reset (actually not needed, but not wrong either).
-    mol.set_positions(original)
+#    mol.set_positions(original)
 
 # If n>1, MA's are written now.
 
@@ -375,13 +383,14 @@ if(n > 1):
 
 ordered += inorganic_all[inorganic_all.symbols == 'Pb']
 ordered += inorganic_all[inorganic_all.symbols == 'Br']
+ordered += inorganic_all[inorganic_all.symbols == 'I']
 
 ##### Finally we have to write the approximate cell.
 ##### Inorganic layers distances must be consistent, so that when the cell is doubled,
 ##### the distances between inorganic layers are the same.
 
-bottom_inorganic_z = np.amin(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'Br')].get_positions()[:,2])
-top_inorganic_z = np.amax(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'Br')].get_positions()[:,2])
+bottom_inorganic_z = np.amin(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'Br') | (ordered.symbols == 'I')].get_positions()[:,2])
+top_inorganic_z = np.amax(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'Br') | (ordered.symbols == 'I')].get_positions()[:,2])
 top_organic_z = np.amax(ordered[(ordered.symbols == 'N') | (ordered.symbols == 'C') | (ordered.symbols == 'H')].get_positions()[:,2])
 
 if (sup =='y'):
@@ -402,11 +411,11 @@ ordered.cell[2][2] = cell_z
 
 prefix = str(sys.argv[1]).split(".")[0]
 
-print('Enter prefix of the name of output file [' + cell_type + 'n' + str(n) + prefix + ro +'_' + super + ']')
+print('Enter prefix of the name of output file [' + cell_type + 'n' + str(n) + prefix + ro +'_' + super + iodide + ']')
 name = input()
 
 if(len(name) == 0):
-    name = cell_type + 'n'  + str(n) + prefix + ro + '_' + super
+    name = cell_type + 'n'  + str(n) + prefix + ro + '_' + super + iodide
 
 write(name + '.traj', ordered)
 write(name + '.xyz', ordered)
