@@ -312,7 +312,7 @@ for i in range(len(N_com)):
     if (N_com[i][2]) > 0:
         a = np.array([0.0, 0.0, 1.0])
     else:
-	a = np.array([0.0, 0.0, -1.0])
+        a = np.array([0.0, 0.0, -1.0])
 
     R = get_rotation_matrix(N_mol_com, a)
 
