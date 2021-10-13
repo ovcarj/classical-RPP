@@ -66,7 +66,7 @@ bottom_MA = Atoms()
 cell_x_factor = 0.0
 cell_y_factor = 0.0
 
-# We ask the user which unit cell type he wants. The x and y lengths of the cell are measured in the units of Pb-Br distance
+# We ask the user which unit cell type he wants. The x and y lengths of the cell are measured in the units of Pb-I distance
 ### cell_type = 1 === cell length is sqrt(2)
 ### cell_type = 2 === cell length is 2
 ### cell_type = 3 === cell length is 1
@@ -135,22 +135,27 @@ if (len(delta_z_factor) == 0):
 
 delta_z_factor = float(delta_z_factor)
 
-# We ask the user if he wants 50-50 iodide-bromide structure.
+# This is a code for mixed 50-50 I/Br structures... Should be merged with iodide/bromide.
 
-print('Do you want a mixed 50-50 I/Br structure? (enter y/n)')
+mix = '_mix'
 
-iod = str(input())
+print('Enter mixed variant (1, 2, 3):')
 
-if (iod == 'y'):
-    iodide = '_mix'
-
-if (iod == 'n'):
-    iodide = ''
+mix_variant = input()
 
 # Depending on the chosen options,
 # template structure is read from the INORGANIC_FRAME_DIR directory
 
-frame = read(os.environ["INORGANIC_FRAME_DIR"] + cell_type + 'n' + str(n) + '_' + reof + '_' + super + iodide + '.traj')
+name = cell_type + 'n' + str(n) + '_' + reof + '_' + super + mix + mix_variant
+
+frame = read(os.environ["INORGANIC_FRAME_DIR"] + name + '.traj')
+
+# The corresponding N position / COM pairs are read from .npy files
+
+N_pos = np.load(os.environ["INORGANIC_FRAME_DIR"] + '/N_COM_pairs/' + name + '_N_pos.npy')
+com = np.load(os.environ["INORGANIC_FRAME_DIR"] + '/N_COM_pairs/' + name + '_com.npy')
+
+N_com = normalized(com - N_pos)
 
 # The long organic molecule is read from the script argument (e.g. PEA.traj, BZA.traj, ...)
 
@@ -161,11 +166,11 @@ mol = read(str(sys.argv[1]))
 symbols = np.asarray(frame.get_chemical_symbols(), dtype='str')
 
 Pb_indices = np.flatnonzero(symbols == 'Pb')
+I_indices = np.flatnonzero(symbols == 'I')
 Br_indices = np.flatnonzero(symbols == 'Br')
 N_indices = np.flatnonzero(symbols == 'N')
 C_indices = np.flatnonzero(symbols == 'C')
 H_indices = np.flatnonzero(symbols == 'H')
-I_indices = np.flatnonzero(symbols == 'I')
 
 organic_indices = np.concatenate((N_indices, C_indices, H_indices))
 
@@ -174,67 +179,35 @@ inorganic_indices = np.concatenate((Pb_indices, Br_indices, I_indices))
 # We create seperate structures containing only organic and inorganic atoms
 
 organic = frame[organic_indices]
-
 inorganic = frame[inorganic_indices]
 
-##### Looking at the organic part, currently we have only indices of C, N, O atoms,
-##### but we don't know which atoms belong to MA molecules, and which belong to long
-##### organic molecules. In the following part this is recognized and we obtain objects
-##### "MA" and "Long" which contain these atoms. To this end we use ASE neighborlists:
 ##### see e.g. https://wiki.fysik.dtu.dk/ase/ase/neighborlist.html#ase.neighborlist.get_connectivity_matrix
 
-cutOff = neighborlist.natural_cutoffs(organic)
-neighborList = neighborlist.NeighborList(cutOff, self_interaction=False, bothways=True)
-neighborList.update(organic)
-
-matrix = neighborList.get_connectivity_matrix()
-
-n_components, component_list = sparse.csgraph.connected_components(matrix)
-
-MA=np.empty((0), dtype='int')
-MA_counter = 0
-
-Long=np.empty((0), dtype='int')
-Long_counter = 0
-
-for i in range(n_components):
-    molIdx=i
-    molIdxs = [ j for j in range(len(component_list)) if component_list[j] == molIdx ]
-    if(len(molIdxs) == 8):
-        MA = np.append(MA, molIdxs, axis=0)
-        MA_counter += 1
-    if(len(molIdxs) > 8):
-        Long = np.append(Long, molIdxs, axis=0)
-        Long_counter += 1
-
-# We have to use if(len(MA) > 0) condition because if n=1 we don't have any MA
-
-if(len(MA) > 0):
+if (n>1):
+    organic = frame[organic_indices]
+    cutOff = neighborlist.natural_cutoffs(organic)
+    neighborList = neighborlist.NeighborList(cutOff, self_interaction=False, bothways=True)
+    neighborList.update(organic)
+    
+    matrix = neighborList.get_connectivity_matrix()
+    
+    n_components, component_list = sparse.csgraph.connected_components(matrix)
+    
+    MA=np.empty((0), dtype='int')
+    MA_counter = 0
+    
+    for i in range(n_components):
+        molIdx=i
+        molIdxs = [ j for j in range(len(component_list)) if component_list[j] == molIdx ]
+        if(len(molIdxs) == 8):
+            MA = np.append(MA, molIdxs, axis=0)
+            MA_counter += 1
+    
     MA = np.split(MA, MA_counter)
-
-Long = np.split(Long, Long_counter)
-
-##### Now we find vectors from N to molecule COM for every long molecule
-##### in the template structure. Also we store N positions.
-
-N_com = np.empty((len(Long), 3))
-N_pos = np.empty((len(Long), 3))
-counter = 0 #this counter just counts on which long molecule we are
-
-for long in Long:
-    long_symbols = np.asarray(organic[long].get_chemical_symbols(), dtype='str')
-    N_index = np.asscalar(np.flatnonzero(long_symbols == 'N'))
-    N_atom = organic[long[N_index]]
-    N_position = N_atom.position
-    N_pos[counter] = N_position
-    N_com[counter] = organic[long].get_center_of_mass() - N_position
-    counter += 1
-
-N_com = normalized(N_com) #we need just the unit vector
 
 ###### Get input molecule (PEA.traj, BZA.traj., ...) N-COM vector
 
-N_mol_index = np.where((mol.symbols == 'N') == True)[0][0]
+N_mol_index = mol[mol.symbols == 'N'][0].index
 N_mol_pos = mol[N_mol_index].position
 N_mol_com = mol.get_center_of_mass() - N_mol_pos
 N_mol_com = normalized(N_mol_com)[0]
@@ -328,7 +301,11 @@ for i in range(len(N_com)):
         a = np.array([0.0, 0.0, -1.0])
 
     R = get_rotation_matrix(N_mol_com, a)
-    
+
+#for i in range(len(N_com)):
+#    
+#    R = get_rotation_matrix(N_mol_com, N_com[i])
+#    
     for j in range(len(mol)):
         new_mol_positions[i][j] = np.matmul(R, mol.get_positions()[j])
 
@@ -356,7 +333,7 @@ if (cell_type == '2'):
 
 for i in range(len(N_pos)):
     # Now we move the rest of N atoms (all but the lowest ones are moved here).
-    if(N_pos[i][2] >= average_z):
+    if(N_pos[i][2] > average_z):
         if (sup == 'y'):
             N_pos[i][2] += delta_z
     #### In the following lines, we write the input molecules to their new positions.
@@ -367,7 +344,7 @@ for i in range(len(N_pos)):
     # The long molecule is added to the final structure.
     ordered += mol
     # The position of molecule is reset (actually not needed, but not wrong either).
-#    mol.set_positions(original)
+    mol.set_positions(original)
 
 # If n>1, MA's are written now.
 
@@ -389,8 +366,8 @@ ordered += inorganic_all[inorganic_all.symbols == 'I']
 ##### Inorganic layers distances must be consistent, so that when the cell is doubled,
 ##### the distances between inorganic layers are the same.
 
-bottom_inorganic_z = np.amin(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'Br') | (ordered.symbols == 'I')].get_positions()[:,2])
-top_inorganic_z = np.amax(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'Br') | (ordered.symbols == 'I')].get_positions()[:,2])
+bottom_inorganic_z = np.amin(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'I') | (ordered.symbols == 'Br')].get_positions()[:,2])
+top_inorganic_z = np.amax(ordered[(ordered.symbols == 'Pb') | (ordered.symbols == 'I') | (ordered.symbols == 'Br')].get_positions()[:,2])
 top_organic_z = np.amax(ordered[(ordered.symbols == 'N') | (ordered.symbols == 'C') | (ordered.symbols == 'H')].get_positions()[:,2])
 
 if (sup =='y'):
@@ -411,11 +388,11 @@ ordered.cell[2][2] = cell_z
 
 prefix = str(sys.argv[1]).split(".")[0]
 
-print('Enter prefix of the name of output file [' + cell_type + 'n' + str(n) + prefix + ro +'_' + super + iodide + ']')
+print('Enter prefix of the name of output file [' + cell_type + 'n' + str(n) + prefix + ro +'_' + super + mix + mix_variant + ']')
 name = input()
 
 if(len(name) == 0):
-    name = cell_type + 'n'  + str(n) + prefix + ro + '_' + super + iodide
+    name = cell_type + 'n'  + str(n) + prefix + ro + '_' + super + mix + mix_variant
 
 write(name + '.traj', ordered)
 write(name + '.xyz', ordered)
